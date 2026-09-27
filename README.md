@@ -87,7 +87,11 @@ pytest -v
 - `docs/TASKS.md` — phased build checklist
 - `AGENTS.md` — rules for AI coding agents working on this repo
 
+## Operational Data Source Status & NCMRWF Roadmap
+**Current data source**: Open-Meteo (public reanalysis-backed archive + live multi-model API). Not yet using NCMRWF's own operational products (IMDAA/MERA reanalysis, IMD gridded station observations). Ingesting IMDAA/MERA directly is the natural next step for a fully NCMRWF-native pipeline; the architecture's pluggable ingestion clients (`ingestion/clients.py`) are designed to make this a contained change.
+
 ---
 
 ## Data attribution
 Weather data via Open-Meteo (CC BY 4.0), sourced from ECMWF, NOAA, DWD and other national weather services. Attribution required in any public deployment.
+

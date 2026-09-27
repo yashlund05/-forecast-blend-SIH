@@ -7,6 +7,10 @@ dashboard footer and/or README.
 
 Base docs: https://open-meteo.com
 
+### Operational Data Source Status & NCMRWF Roadmap
+**Current data source**: Open-Meteo (public reanalysis-backed archive + live multi-model API). Not yet using NCMRWF's own operational products (IMDAA/MERA reanalysis, IMD gridded station observations). Ingesting IMDAA/MERA directly is the natural next step for a fully NCMRWF-native pipeline; the architecture's pluggable ingestion clients (`ingestion/clients.py`) are designed to make this a contained change.
+
+
 ### 1. Multi-model forecast (physical NWP + ensemble)
 Endpoint: `https://api.open-meteo.com/v1/forecast`
 Key params:
