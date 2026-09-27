@@ -179,12 +179,17 @@ class DatabaseManager:
             )
 
             # Model weights lookup table (Module 2 output)
+            # regime column conditions weights on weather regime
+            # (monsoon_active / monsoon_break / off_season / all_regimes).
+            # "all_regimes" is the sentinel for season-level aggregate rows so
+            # backward-compatible queries without a regime filter still work.
             cursor.execute(
                 """
                 CREATE TABLE IF NOT EXISTS model_weights (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     location_id TEXT NOT NULL,
                     season TEXT NOT NULL,
+                    regime TEXT NOT NULL DEFAULT 'all_regimes',
                     lead_time_bucket TEXT NOT NULL,
                     variable TEXT NOT NULL,
                     model TEXT NOT NULL,
@@ -194,14 +199,59 @@ class DatabaseManager:
                     mae REAL,
                     low_confidence INTEGER NOT NULL,
                     updated_at TEXT NOT NULL,
-                    UNIQUE(location_id, season, lead_time_bucket, variable, model) ON CONFLICT REPLACE
+                    UNIQUE(location_id, season, regime, lead_time_bucket, variable, model) ON CONFLICT REPLACE
                 )
                 """
             )
+            # Live migration: rebuild table if existing schema lacks 'regime'
+            # in the UNIQUE constraint (detectable from the CREATE TABLE SQL).
+            row = cursor.execute(
+                "SELECT sql FROM sqlite_master WHERE type='table' AND name='model_weights'"
+            ).fetchone()
+            existing_sql = row[0] if row else ""
+            needs_rebuild = (
+                "regime" not in existing_sql
+                or "UNIQUE(location_id, season, regime" not in existing_sql
+            )
+            if needs_rebuild:
+                cursor.execute("ALTER TABLE model_weights RENAME TO model_weights_old")
+                cursor.execute(
+                    """
+                    CREATE TABLE model_weights (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        location_id TEXT NOT NULL,
+                        season TEXT NOT NULL,
+                        regime TEXT NOT NULL DEFAULT 'all_regimes',
+                        lead_time_bucket TEXT NOT NULL,
+                        variable TEXT NOT NULL,
+                        model TEXT NOT NULL,
+                        weight REAL NOT NULL,
+                        sample_count INTEGER NOT NULL,
+                        rmse REAL,
+                        mae REAL,
+                        low_confidence INTEGER NOT NULL,
+                        updated_at TEXT NOT NULL,
+                        UNIQUE(location_id, season, regime, lead_time_bucket, variable, model) ON CONFLICT REPLACE
+                    )
+                    """
+                )
+                cursor.execute(
+                    """
+                    INSERT INTO model_weights
+                        (location_id, season, regime, lead_time_bucket, variable,
+                         model, weight, sample_count, rmse, mae, low_confidence, updated_at)
+                    SELECT location_id, season,
+                           COALESCE(regime, 'all_regimes'),
+                           lead_time_bucket, variable,
+                           model, weight, sample_count, rmse, mae, low_confidence, updated_at
+                    FROM model_weights_old
+                    """
+                )
+                cursor.execute("DROP TABLE model_weights_old")
             cursor.execute(
                 """
                 CREATE INDEX IF NOT EXISTS idx_model_weights_lookup
-                ON model_weights (location_id, season, lead_time_bucket, variable)
+                ON model_weights (location_id, season, regime, lead_time_bucket, variable)
                 """
             )
 
@@ -446,7 +496,11 @@ class DatabaseManager:
             return pd.read_sql_query(query, conn, params=params)
 
     def save_model_weights(self, df_or_records: Any) -> int:
-        """Insert or replace computed model weights."""
+        """Insert or replace computed model weights.
+
+        Records may optionally include a 'regime' key (str).
+        If absent, the DB column defaults to 'all_regimes'.
+        """
         if isinstance(df_or_records, pd.DataFrame):
             if df_or_records.empty:
                 return 0
@@ -457,15 +511,19 @@ class DatabaseManager:
         if not records:
             return 0
 
+        # Ensure every record has a regime field (backward compat)
+        for rec in records:
+            rec.setdefault("regime", "all_regimes")
+
         with self.get_connection() as conn:
             cursor = conn.cursor()
             cursor.executemany(
                 """
                 INSERT INTO model_weights (
-                    location_id, season, lead_time_bucket, variable,
+                    location_id, season, regime, lead_time_bucket, variable,
                     model, weight, sample_count, rmse, mae, low_confidence, updated_at
                 ) VALUES (
-                    :location_id, :season, :lead_time_bucket, :variable,
+                    :location_id, :season, :regime, :lead_time_bucket, :variable,
                     :model, :weight, :sample_count, :rmse, :mae, :low_confidence, :updated_at
                 )
                 """,
@@ -477,10 +535,21 @@ class DatabaseManager:
         self,
         location_id: Optional[str] = None,
         season: Optional[str] = None,
+        regime: Optional[str] = None,
         lead_time_bucket: Optional[str] = None,
         variable: Optional[str] = None,
     ) -> pd.DataFrame:
-        """Query computed model weights from SQLite."""
+        """Query computed model weights from SQLite.
+
+        Args:
+            location_id: Filter by station.
+            season: Filter by season ('monsoon', 'pre-monsoon', etc.).
+            regime: Filter by weather regime ('monsoon_active', 'monsoon_break',
+                    'off_season', 'all_regimes').  If None, no regime filter is applied
+                    (returns all regimes, including 'all_regimes' aggregate rows).
+            lead_time_bucket: Filter by lead-time bucket.
+            variable: Filter by forecast variable.
+        """
         with self.get_connection() as conn:
             query = "SELECT * FROM model_weights WHERE 1=1"
             params: List[Any] = []
@@ -490,12 +559,15 @@ class DatabaseManager:
             if season:
                 query += " AND season = ?"
                 params.append(season)
+            if regime is not None:
+                query += " AND regime = ?"
+                params.append(regime)
             if lead_time_bucket:
                 query += " AND lead_time_bucket = ?"
                 params.append(lead_time_bucket)
             if variable:
                 query += " AND variable = ?"
                 params.append(variable)
-            query += " ORDER BY location_id, season, variable, model"
+            query += " ORDER BY location_id, season, regime, variable, model"
             return pd.read_sql_query(query, conn, params=params)
 

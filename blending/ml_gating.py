@@ -111,7 +111,43 @@ class RegimeGatedBlendEngine:
             lambda loc: topo_map.get(TARGET_LOCATIONS[loc].topography.lower(), 0) if loc in TARGET_LOCATIONS else 0
         )
 
+        # Regime categorical encoding (integer code fed to GBDT as a numeric feature).
+        # Regime is computed from the obs precipitation rolling mean per location,
+        # then joined by (location_id, target_time) to the forecast rows.
+        # Cyclone-influence regime is NOT included — see blending/regime.py for justification.
+        from blending.regime import classify_regime_series, REGIME_LABELS
+        regime_int_map = {label: i for i, label in enumerate(REGIME_LABELS)}
+        regime_int_map["off_season"] = len(REGIME_LABELS)  # safety fallback
+
+        # Build per-location regime series from raw obs in same date range
+        regime_frames = []
+        for loc_id, loc_df in raw_df.groupby("location_id"):
+            obs_sub = loc_df[["target_time", "obs_precipitation"]].rename(
+                columns={"target_time": "time", "obs_precipitation": "precipitation"}
+            ).drop_duplicates("time")
+            regime_s = classify_regime_series(obs_sub, loc_id)
+            obs_sub = obs_sub.copy()
+            obs_sub["regime_label"] = regime_s.values
+            obs_sub["location_id"] = loc_id
+            regime_frames.append(obs_sub[["location_id", "time", "regime_label"]])
+
+        if regime_frames:
+            regime_df = pd.concat(regime_frames, ignore_index=True).rename(
+                columns={"time": "target_time"}
+            )
+            merged = pd.merge(
+                merged, regime_df, on=["location_id", "target_time"], how="left"
+            )
+            merged["regime_label"] = merged["regime_label"].fillna("off_season")
+        else:
+            merged["regime_label"] = "off_season"
+
+        merged["regime_code"] = merged["regime_label"].map(
+            lambda r: regime_int_map.get(r, len(REGIME_LABELS))
+        ).fillna(len(REGIME_LABELS))
+
         return merged
+
 
     def train_and_evaluate(self, variable: str = "temperature_2m") -> MLGatingEvaluation:
         """Train GBDT model on non-overlapping TRAIN period and evaluate on held-out TEST period."""
@@ -136,6 +172,7 @@ class RegimeGatedBlendEngine:
             "ensemble_mean",
             "ensemble_std",
             "topo_code",
+            "regime_code",  # weather regime: 0=monsoon_active, 1=monsoon_break, 2=off_season
         ]
 
         target_col = f"obs_{variable}"

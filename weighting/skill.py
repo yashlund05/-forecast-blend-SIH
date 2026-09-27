@@ -198,16 +198,26 @@ class SkillEngine:
             logger.error("Exception fetching historical forecasts for %s: %s", location_id, e)
             return 0
 
+
     def compute_skill_metrics(
         self,
         location_id: str,
         start_date: str = TRAIN_START,
         end_date: str = CALIBRATE_END,
     ) -> pd.DataFrame:
-        """Compute MAE and RMSE per (location, season, lead_time_bucket, variable, model).
-        
-        Strictly enforces non-overlapping train+calibrate time range.
+        """Compute MAE and RMSE per (location, season, regime, lead_time_bucket, variable, model).
+
+        Conditioning dimensions:
+        - season       : pre-monsoon / monsoon / post-monsoon / winter
+        - regime       : monsoon_active / monsoon_break / off_season / all_regimes (aggregate)
+        - lead_time_bucket : 0-24h / 24-72h / 72-120h / 120h+ / all
+        - variable     : temperature_2m / precipitation / wind_speed_10m
+        - model        : gfs / icon / ecmwf_ifs
+
+        Strictly enforces non-overlapping train+calibrate time range (Hard Rule 4).
         """
+        from blending.regime import classify_regime_series, REGIME_LABELS
+
         assert_valid_skill_date_range(start_date, end_date)
 
         loc_cfg = TARGET_LOCATIONS.get(location_id)
@@ -255,59 +265,84 @@ class SkillEngine:
         if merged.empty:
             return pd.DataFrame()
 
-        # Assign season column and lead time bucket
+        # 4. Assign season, lead-time bucket, and regime columns
         merged["season"] = [get_season_for_timestamp(t) for t in merged["target_time"]]
         merged["lead_time_bucket"] = [get_lead_time_bucket_for_timestamp(t) for t in merged["target_time"]]
+
+        # Regime classification uses rolling 7-day precipitation from observations only.
+        # The regime series is computed on obs_df (one row per timestamp) then joined by
+        # target_time so the merged forecast rows inherit the correct regime label.
+        regime_series = classify_regime_series(obs_df[["time", "precipitation"]], location_id)
+        obs_regime_df = obs_df[["time"]].copy()
+        obs_regime_df["regime"] = regime_series.values
+
+        merged = pd.merge(
+            merged,
+            obs_regime_df.rename(columns={"time": "target_time"}),
+            on="target_time",
+            how="left",
+        )
+        merged["regime"] = merged["regime"].fillna("off_season")
 
         variables = ["temperature_2m", "precipitation", "wind_speed_10m"]
         models = merged["model"].unique().tolist()
         seasons = merged["season"].unique().tolist()
         lead_buckets = list(LEAD_TIME_BUCKETS.keys())
+        # Regime levels: the three actual regimes PLUS the "all_regimes" aggregate
+        regimes = list(REGIME_LABELS) + ["all_regimes"]
 
         skill_records: List[Dict[str, Any]] = []
 
-        # Compute metrics across lead time buckets and seasons
+        # Compute metrics across seasons, regimes, and lead time buckets
         for season in seasons:
             s_sub = merged[merged["season"] == season]
 
-            for bucket in lead_buckets:
-                if bucket == "all":
-                    b_sub = s_sub
+            for regime in regimes:
+                if regime == "all_regimes":
+                    r_sub = s_sub  # aggregate across all regimes
                 else:
-                    b_sub = s_sub[s_sub["lead_time_bucket"] == bucket]
+                    r_sub = s_sub[s_sub["regime"] == regime]
 
-                for var in variables:
-                    for model in models:
-                        m_sub = b_sub[b_sub["model"] == model]
-                        
-                        y_fcst = m_sub[f"{var}_fcst"].to_numpy(dtype=float)
-                        y_obs = m_sub[f"{var}_obs"].to_numpy(dtype=float)
+                for bucket in lead_buckets:
+                    if bucket == "all":
+                        b_sub = r_sub
+                    else:
+                        b_sub = r_sub[r_sub["lead_time_bucket"] == bucket]
 
-                        valid_mask = ~np.isnan(y_fcst) & ~np.isnan(y_obs)
-                        y_fcst = y_fcst[valid_mask]
-                        y_obs = y_obs[valid_mask]
-                        n_samples = len(y_fcst)
+                    for var in variables:
+                        for model in models:
+                            m_sub = b_sub[b_sub["model"] == model]
 
-                        if n_samples > 0:
-                            errors = y_fcst - y_obs
-                            mae = float(np.mean(np.abs(errors)))
-                            rmse = float(np.sqrt(np.mean(errors ** 2)))
-                        else:
-                            mae = np.nan
-                            rmse = np.nan
+                            y_fcst = m_sub[f"{var}_fcst"].to_numpy(dtype=float)
+                            y_obs = m_sub[f"{var}_obs"].to_numpy(dtype=float)
 
-                        skill_records.append(
-                            {
-                                "location_id": location_id,
-                                "topography": loc_cfg.topography,
-                                "season": season,
-                                "lead_time_bucket": bucket,
-                                "variable": var,
-                                "model": model,
-                                "sample_count": n_samples,
-                                "mae": round(mae, 3) if not np.isnan(mae) else None,
-                                "rmse": round(rmse, 3) if not np.isnan(rmse) else None,
-                            }
-                        )
+                            valid_mask = ~np.isnan(y_fcst) & ~np.isnan(y_obs)
+                            y_fcst = y_fcst[valid_mask]
+                            y_obs = y_obs[valid_mask]
+                            n_samples = len(y_fcst)
+
+                            if n_samples > 0:
+                                errors = y_fcst - y_obs
+                                mae = float(np.mean(np.abs(errors)))
+                                rmse = float(np.sqrt(np.mean(errors ** 2)))
+                            else:
+                                mae = np.nan
+                                rmse = np.nan
+
+                            skill_records.append(
+                                {
+                                    "location_id": location_id,
+                                    "topography": loc_cfg.topography,
+                                    "season": season,
+                                    "regime": regime,
+                                    "lead_time_bucket": bucket,
+                                    "variable": var,
+                                    "model": model,
+                                    "sample_count": n_samples,
+                                    "mae": round(mae, 3) if not np.isnan(mae) else None,
+                                    "rmse": round(rmse, 3) if not np.isnan(rmse) else None,
+                                }
+                            )
 
         return pd.DataFrame(skill_records)
+

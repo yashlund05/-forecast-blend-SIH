@@ -413,3 +413,128 @@ class VerificationEngine:
             "failure_cases": underperforming_cases,
         }
 
+    def evaluate_regime_stratified(
+        self,
+        locations: Optional[List[str]] = None,
+        start_date: str = TEST_START,
+        end_date: str = TEST_END,
+    ) -> Dict[str, Any]:
+        """Compute blend vs. naive RMSE per weather regime over the TEST period.
+
+        Compares regime-conditioned blend RMSE against naive equal-weight blend RMSE
+        for three regimes: monsoon_active, monsoon_break, off_season.
+
+        Returns:
+            Dict with keys 'regime_rows' (list of dicts) and 'regime_df' (DataFrame).
+        """
+        from blending.regime import classify_regime_series, REGIME_LABELS
+
+        assert_strictly_test_period(start_date, end_date)
+        target_keys = locations or list(TARGET_LOCATIONS.keys())
+        self.ensure_test_forecasts_loaded(target_keys, start_date, end_date)
+
+        variables = ["temperature_2m", "precipitation", "wind_speed_10m"]
+        models = ["gfs", "icon", "ecmwf_ifs"]
+        regime_rows: List[Dict[str, Any]] = []
+
+        for loc_id in target_keys:
+            loc_cfg = TARGET_LOCATIONS[loc_id]
+
+            obs_df = self.db.get_historical_observations(
+                location_id=loc_id, start_date=start_date, end_date=end_date
+            )
+            fcst_df = self.db.get_historical_forecasts(
+                location_id=loc_id, start_date=start_date, end_date=end_date, models=models
+            )
+            if obs_df.empty or fcst_df.empty:
+                continue
+
+            # Compute regime label per observation timestamp in TEST period
+            regime_series = classify_regime_series(
+                obs_df[["time", "precipitation"]], loc_id
+            )
+            obs_df = obs_df.copy()
+            obs_df["regime"] = regime_series.values
+
+            merged = pd.merge(
+                fcst_df,
+                obs_df,
+                left_on=["location_id", "target_time"],
+                right_on=["location_id", "time"],
+                suffixes=("_fcst", "_obs"),
+            )
+            if merged.empty:
+                continue
+
+            # Retrieve regime-conditioned weights from SQLite for each regime
+            for regime in list(REGIME_LABELS):
+                r_merged = merged[merged["regime"] == regime]
+                if len(r_merged) < 10:
+                    continue  # skip sparse regimes in the TEST period
+
+                # Season-agnostic lookup via all_regimes sentinel if regime-specific not found
+                learned_weights_df = self.db.get_model_weights(
+                    location_id=loc_id, season="monsoon", regime=regime
+                )
+                if learned_weights_df.empty:
+                    learned_weights_df = self.db.get_model_weights(
+                        location_id=loc_id, regime="all_regimes"
+                    )
+                weights_by_var: Dict[str, Dict[str, float]] = {}
+                if not learned_weights_df.empty:
+                    for var, grp in learned_weights_df.groupby("variable"):
+                        weights_by_var[str(var)] = dict(zip(grp["model"], grp["weight"]))
+
+                for var in variables:
+                    pivot_times = sorted(r_merged["target_time"].unique())
+                    obs_list, naive_list, learned_list = [], [], []
+                    cfg_w = weights_by_var.get(var, {m: 1 / len(models) for m in models})
+
+                    for t_str in pivot_times:
+                        t_sub = r_merged[r_merged["target_time"] == t_str]
+                        obs_val = t_sub[f"{var}_obs"].iloc[0]
+                        if np.isnan(obs_val):
+                            continue
+                        m_dict = dict(zip(t_sub["model"], t_sub[f"{var}_fcst"]))
+                        avail_m = [m for m in models if m in m_dict and not np.isnan(m_dict[m])]
+                        if len(avail_m) < 2:
+                            continue
+                        naive_val = float(np.mean([m_dict[m] for m in avail_m]))
+                        renorm_w = renormalize_weights(avail_m, cfg_w)
+                        learned_val = float(np.sum([renorm_w[m] * m_dict[m] for m in avail_m]))
+                        if var == "precipitation":
+                            naive_val = max(0.0, naive_val)
+                            learned_val = max(0.0, learned_val)
+                        obs_list.append(obs_val)
+                        naive_list.append(naive_val)
+                        learned_list.append(learned_val)
+
+                    if len(obs_list) < 5:
+                        continue
+
+                    y_obs = np.array(obs_list)
+                    y_naive = np.array(naive_list)
+                    y_learned = np.array(learned_list)
+
+                    rmse_naive = float(np.sqrt(np.mean((y_obs - y_naive) ** 2)))
+                    rmse_blend = float(np.sqrt(np.mean((y_obs - y_learned) ** 2)))
+                    pct_imp = ((rmse_naive - rmse_blend) / rmse_naive) * 100 if rmse_naive > 0 else 0.0
+
+                    regime_rows.append({
+                        "location_id": loc_id,
+                        "station_name": loc_cfg.name,
+                        "regime": regime,
+                        "variable": var,
+                        "n_samples": len(obs_list),
+                        "rmse_blend": round(rmse_blend, 3),
+                        "rmse_naive": round(rmse_naive, 3),
+                        "pct_imp_vs_naive": round(pct_imp, 2),
+                        "blend_wins": rmse_blend < rmse_naive,
+                    })
+
+        return {
+            "regime_rows": regime_rows,
+            "regime_df": pd.DataFrame(regime_rows),
+        }
+
+

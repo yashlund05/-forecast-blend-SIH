@@ -84,14 +84,20 @@ class ForecastBlendEngine:
         self.db = db_manager
 
     def _lookup_db_weights(
-        self, location_id: str, season: str
+        self, location_id: str, season: str, regime: str = "all_regimes"
     ) -> Optional[Dict[str, Dict[str, float]]]:
-        """Query learned model weights from database for given location and season."""
+        """Query learned model weights from database for given location, season, and regime.
+
+        Fallback chain: regime-specific → all_regimes → equal weighting.
+        """
         if self.db is None:
             from ingestion.db import DatabaseManager
             self.db = DatabaseManager()
 
-        df = self.db.get_model_weights(location_id=location_id, season=season)
+        df = self.db.get_model_weights(location_id=location_id, season=season, regime=regime)
+        if df.empty and regime != "all_regimes":
+            # Fallback: regime-specific not found → season-level aggregate
+            df = self.db.get_model_weights(location_id=location_id, season=season, regime="all_regimes")
         if df.empty:
             # Try overall location weights if season-specific not present
             df = self.db.get_model_weights(location_id=location_id)
@@ -105,14 +111,16 @@ class ForecastBlendEngine:
 
         return learned_weights if learned_weights else None
 
+
     def blend(
         self,
         forecasts_df: pd.DataFrame,
         weights: Optional[Union[Dict[str, float], Dict[str, Dict[str, float]]]] = None,
         variables: Optional[List[str]] = None,
-    ) -> BlendedForecastResult:
+        obs_df: Optional[pd.DataFrame] = None,
+    ) -> "BlendedForecastResult":
         """Blend forecasts across available models using weighted averaging.
-        
+
         Args:
             forecasts_df: DataFrame containing normalized forecasts.
                 Required columns: 'location_id', 'fetch_timestamp', 'target_time',
@@ -121,9 +129,13 @@ class ForecastBlendEngine:
                 - Dict[model_name, float] (applied across all variables)
                 - Dict[variable_name, Dict[model_name, float]] (per-variable weights)
                 If None, automatically queries learned weights from Module 2 (SQLite),
-                falling back to equal weighting if uncalibrated.
+                conditioned on the detected weather regime, falling back to equal
+                weighting if uncalibrated.
             variables: List of variable columns to blend. Defaults to BLEND_VARIABLES.
-            
+            obs_df: Optional recent observation DataFrame with columns 'time' and
+                'precipitation' (used for regime classification).  If None, defaults
+                to 'all_regimes' sentinel weights (backward-compatible behavior).
+
         Returns:
             BlendedForecastResult containing blended timeseries and weighting metadata.
         """
@@ -147,9 +159,28 @@ class ForecastBlendEngine:
             first_target = str(forecasts_df["target_time"].iloc[0])
             from weighting.skill import get_season_for_timestamp
             season = get_season_for_timestamp(first_target)
-            learned_w = self._lookup_db_weights(location_id=location_id, season=season)
+
+            # Detect weather regime from recent observations (live path)
+            regime = "all_regimes"
+            if obs_df is not None and not obs_df.empty:
+                try:
+                    from blending.regime import classify_regime
+                    regime = classify_regime(obs_df, location_id, target_time=first_target)
+                    logger.info(
+                        "Regime detected for %s (%s): %s", location_id, season, regime
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Regime classification failed for %s, using all_regimes: %s",
+                        location_id, exc,
+                    )
+
+            learned_w = self._lookup_db_weights(
+                location_id=location_id, season=season, regime=regime
+            )
             if learned_w:
                 weights = learned_w
+
 
         available_models = sorted(list(forecasts_df["model"].unique()))
         missing_models = [m for m in BLEND_MODELS if m not in available_models]

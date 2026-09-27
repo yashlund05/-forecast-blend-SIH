@@ -159,10 +159,12 @@ class CaseStudyEngine:
         # Calculate Naive Equal-Weight Blend
         piv["naive_blend"] = piv[models_available].mean(axis=1)
 
-        # 3. Retrieve learned weights for this context
+        # 3. Retrieve learned weights for this context (aggregate season weights)
         weights_df = self.db.get_model_weights(
             location_id=loc_id,
             season="monsoon",
+            regime="all_regimes",
+            lead_time_bucket="all",
             variable=var,
         )
         base_weights = {row["model"]: row["weight"] for _, row in weights_df.iterrows()} if not weights_df.empty else {}

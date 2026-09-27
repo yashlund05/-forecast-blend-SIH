@@ -105,12 +105,17 @@ def test_stored_database_weights_integrity():
     if df.empty:
         pytest.skip("Model weights not yet generated in SQLite.")
 
-    # Group by location, season, lead_time_bucket, variable and check sum == 1.0
-    for (loc, season, lead_b, var), group in df.groupby(["location_id", "season", "lead_time_bucket", "variable"]):
+    # Group by location, season, regime, lead_time_bucket, variable and check sum == 1.0
+    group_cols = ["location_id", "season", "lead_time_bucket", "variable"]
+    if "regime" in df.columns:
+        group_cols = ["location_id", "season", "regime", "lead_time_bucket", "variable"]
+
+    for key, group in df.groupby(group_cols):
         weight_sum = group["weight"].sum()
         assert weight_sum == pytest.approx(1.0, abs=1e-3), (
-            f"Weights do not sum to 1.0 for ({loc}, {season}, {lead_b}, {var}): sum={weight_sum}"
+            f"Weights do not sum to 1.0 for {key}: sum={weight_sum}"
         )
+
 
 
 def test_weights_differ_across_lead_time_buckets():
@@ -156,3 +161,98 @@ def test_weight_explainability_trace():
         assert "rmse" in m
 
 
+def test_regime_classifier_known_cases():
+    """Verify classify_regime returns correct labels for constructed known scenarios.
+
+    Uses synthetic DataFrames to avoid depending on live DB state.
+    """
+    import pandas as pd
+    from blending.regime import classify_regime
+
+    # Case 1: 7-day heavy rainfall in June (monsoon window) → monsoon_active
+    times = pd.date_range("2023-06-01", periods=200, freq="h")
+    obs_active = pd.DataFrame({
+        "time": times.strftime("%Y-%m-%dT%H:%M"),
+        "precipitation": [1.0] * 200,  # 1 mm/hr well above 0.3 threshold
+    })
+    assert classify_regime(obs_active, "mumbai") == "monsoon_active", \
+        "Expected monsoon_active during June with heavy precipitation"
+
+    # Case 2: dry spell in July (monsoon window) → monsoon_break
+    obs_break = pd.DataFrame({
+        "time": times.strftime("%Y-%m-%dT%H:%M"),
+        "precipitation": [0.0] * 200,  # 0 mm/hr → break
+    })
+    assert classify_regime(obs_break, "mumbai") == "monsoon_break", \
+        "Expected monsoon_break during July with zero precipitation"
+
+    # Case 3: January (off-season for all SW-monsoon stations) → off_season
+    times_jan = pd.date_range("2024-01-10", periods=200, freq="h")
+    obs_off = pd.DataFrame({
+        "time": times_jan.strftime("%Y-%m-%dT%H:%M"),
+        "precipitation": [0.5] * 200,  # even heavy rain in Jan → off_season
+    })
+    assert classify_regime(obs_off, "mumbai") == "off_season", \
+        "Expected off_season in January regardless of precipitation"
+
+    # Case 4: October for Chennai (SE monsoon station) with heavy rain → monsoon_active
+    times_oct = pd.date_range("2023-10-01", periods=200, freq="h")
+    obs_chennai_oct = pd.DataFrame({
+        "time": times_oct.strftime("%Y-%m-%dT%H:%M"),
+        "precipitation": [1.5] * 200,
+    })
+    assert classify_regime(obs_chennai_oct, "chennai") == "monsoon_active", \
+        "Expected monsoon_active for Chennai in October (SE monsoon window)"
+
+
+def test_regime_weights_differ_from_all_regimes():
+    """Verify that regime-stratified weights differ from the all_regimes aggregate.
+
+    Guards against regime conditioning silently collapsing to the season aggregate.
+    """
+    db = DatabaseManager()
+    if db.get_model_weights(location_id="mumbai", season="monsoon", regime="monsoon_active").empty:
+        pytest.skip("Regime weights not yet generated in SQLite.")
+
+    df_active = db.get_model_weights(
+        location_id="mumbai", season="monsoon",
+        regime="monsoon_active", variable="temperature_2m", lead_time_bucket="all"
+    )
+    df_all = db.get_model_weights(
+        location_id="mumbai", season="monsoon",
+        regime="all_regimes", variable="temperature_2m", lead_time_bucket="all"
+    )
+
+    assert not df_active.empty, "monsoon_active weights missing for mumbai/monsoon/temperature_2m"
+    assert not df_all.empty, "all_regimes weights missing for mumbai/monsoon/temperature_2m"
+
+    w_active = df_active.set_index("model")["weight"].to_dict()
+    w_all = df_all.set_index("model")["weight"].to_dict()
+
+    # At least one model's weight must differ by > 0.005 across regimes
+    common_models = set(w_active) & set(w_all)
+    diffs = [abs(w_active[m] - w_all[m]) for m in common_models]
+    assert max(diffs) > 0.005, (
+        f"Regime-stratified weights must differ from all_regimes aggregate. "
+        f"active={w_active}, all={w_all}"
+    )
+
+
+def test_regime_weights_sum_to_one():
+    """Verify weights sum to 1.0 across all regime × season × lead_time × variable cells."""
+    db = DatabaseManager()
+    df = db.get_model_weights(location_id="mumbai")
+    if df.empty:
+        pytest.skip("Model weights not yet generated in SQLite.")
+
+    if "regime" not in df.columns:
+        pytest.skip("Regime column not present — run generate_and_save_weights first.")
+
+    for (loc, season, regime, lead_b, var), group in df.groupby(
+        ["location_id", "season", "regime", "lead_time_bucket", "variable"]
+    ):
+        weight_sum = group["weight"].sum()
+        assert weight_sum == pytest.approx(1.0, abs=1e-3), (
+            f"Weights do not sum to 1.0 for ({loc}, {season}, {regime}, {lead_b}, {var}): "
+            f"sum={weight_sum}"
+        )

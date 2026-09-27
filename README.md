@@ -4,7 +4,8 @@ SIH Problem Statement 26081 | Ministry of Earth Sciences / NCMRWF | Theme: Disas
 
 A hybrid AI–NWP multi-model forecast blending system that dynamically pulls live operational forecasts from Open-Meteo (NOAA GFS, DWD ICON, ECMWF IFS, and ECMWF AIFS), blends them using adaptive regional and seasonal inverse-error weights, flags extreme weather against verified IMD operational thresholds, and generates actionable multilingual district disaster bulletins.
 
-**Status**: Hackathon prototype, feature-complete through Phase 7 (all tasks in `docs/TASKS.md` checked, 35/35 tests passing).
+**Status**: Hackathon prototype, feature-complete through Phase 7 (all tasks in `docs/TASKS.md` checked, 38/38 tests passing).
+
 
 
 ---
@@ -23,6 +24,7 @@ The system implements all six core architectural modules and two key differentia
 ### Key Differentiators
 - **Real Live Data, Zero Fabrication**: Forecasts and reanalysis benchmarks are retrieved live from Open-Meteo APIs. No skill scores, case studies, or verification numbers are hardcoded or simulated.
 - **Strict Leak-Free Time-Split & Honest Limitation Reporting**: Training (`2021-09-01` to `2024-04-30`) and test (`2024-07-01` to `2024-08-31`) windows are strictly non-overlapping. The verification dashboard reports all edge cases where individual physical models outperformed the blend rather than filtering them out.
+- **Regime-Conditioned Weighting (core feature, not stretch goal)**: Weights condition on four dimensions: `station × season × weather-regime × lead-time-bucket`. Weather regime (monsoon-active / monsoon-break / off-season) is classified in real-time from rolling 7-day precipitation anomaly. Cyclone-influence regime was evaluated but dropped (5–74 occurrences / 24,792 = 0.0–0.3% per station — below the minimum sample threshold for trusted inverse-error weights; documented in `blending/regime.py`).
 - **Evidence-Backed, Qualified Claim**: Blending demonstrably helps for precipitation (**+7.81% vs. naive**, RMSE 1.076 mm vs. 1.167 mm) and wind speed (**+6.81% vs. naive**, **+9.16% vs. ECMWF IFS**, RMSE 2.728 km/h vs. 3.002 km/h, $p < 0.05$); for temperature, results favor using ECMWF IFS directly (IFS achieves **0.794 °C** vs. blend **0.833 °C**; 90% CI on difference excludes zero), as IFS's 4D-Var data assimilation leaves virtually no headroom for linear weight combinations with lower-resolution models.
 
 ---
@@ -48,11 +50,27 @@ Evaluated across **43,920 point-predictions** (14,640 per variable across 10 nat
 
 *Key finding: The blend's advantage over naive averaging **grows monotonically** with lead time for precipitation (from -0.26% at Day 1 up to +9.66% at Days 6–7), demonstrating how adaptive weighting filters out long-range NWP dispersion errors.*
 
+### Performance Breakdown by Weather Regime (Monsoon TEST Period)
+
+Regime computed from rolling 7-day precipitation anomaly. All numbers from held-out TEST period (2024-07-01 to 2024-08-31).
+
+| Regime | Variable | Blend RMSE | Naive RMSE | % Improvement | Stations Blend Wins |
+| :--- | :--- | :---: | :---: | :---: | :---: |
+| **Monsoon Active** | Temperature (2m) | 0.826 °C | 1.198 °C | **+27.68%** | 100% |
+| **Monsoon Active** | Precipitation | 1.350 mm | 1.384 mm | **+2.17%** | 80% |
+| **Monsoon Active** | Wind Speed (10m) | 2.735 km/h | 2.850 km/h | **+3.86%** | 60% |
+| **Monsoon Break** | Temperature (2m) | 0.923 °C | 1.275 °C | **+24.88%** | 90% |
+| **Monsoon Break** | Precipitation | 0.795 mm | 0.864 mm | **+7.36%** | 90% |
+| **Monsoon Break** | Wind Speed (10m) | 2.741 km/h | 2.951 km/h | **+6.46%** | 100% |
+
+*Honest reporting: regime-blend underperforms naive in 8/60 (regime × variable × station) cells — including Delhi precipitation during monsoon-active (where local thunderstorm-dominated convection is poorly captured by any model's regional weighting) and Shimla temperature during monsoon-break (complex orographic effects). Full failure table in dashboard Tab 3.*
+
 - **Normalized Multi-Variate Skill Score**: **+15.28%** (unitless arithmetic mean of relative error reductions vs. naive averaging; macro sample-weighted reduction is **+14.13%**).
 - **No Unit-Mixed RMSE**: Averaging RMSE across heterogeneous units (°C, mm, km/h) is mathematically invalid and has been removed from all reports in favor of normalized skill scoring and per-variable evaluation.
 - For complete 1,000-resample bootstrap confidence intervals, full 16-case failure logs, and IMD SOP citations, see [VERIFICATION_REPORT.md](VERIFICATION_REPORT.md).
 
 ---
+
 
 ## Setup & Run
 

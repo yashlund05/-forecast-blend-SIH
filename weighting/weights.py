@@ -110,7 +110,13 @@ class WeightEngine:
         self,
         locations: Optional[List[str]] = None,
     ) -> pd.DataFrame:
-        """Compute skill metrics and generate full weights table stored in SQLite."""
+        """Compute skill metrics and generate full weights table stored in SQLite.
+
+        The weight table now conditions on four dimensions:
+          location × season × regime × lead_time_bucket × variable
+        where regime ∈ {monsoon_active, monsoon_break, off_season, all_regimes}.
+        'all_regimes' is an aggregate sentinel retained for backward-compatible lookups.
+        """
         target_keys = locations or list(TARGET_LOCATIONS.keys())
         updated_at = datetime.now(timezone.utc).isoformat()
         records_to_save: List[Dict[str, Any]] = []
@@ -126,45 +132,48 @@ class WeightEngine:
             variables = skill_df["variable"].unique()
             seasons = skill_df["season"].unique()
             lead_buckets = skill_df["lead_time_bucket"].unique() if "lead_time_bucket" in skill_df.columns else ["all"]
+            regimes = skill_df["regime"].unique() if "regime" in skill_df.columns else ["all_regimes"]
 
             for season in seasons:
-                for bucket in lead_buckets:
-                    for var in variables:
-                        sub = skill_df[
-                            (skill_df["season"] == season)
-                            & (skill_df["lead_time_bucket"] == bucket)
-                            & (skill_df["variable"] == var)
-                        ]
+                for regime in regimes:
+                    for bucket in lead_buckets:
+                        for var in variables:
+                            sub = skill_df[
+                                (skill_df["season"] == season)
+                                & (skill_df["regime"] == regime)
+                                & (skill_df["lead_time_bucket"] == bucket)
+                                & (skill_df["variable"] == var)
+                            ]
 
-                        rmse_map = dict(zip(sub["model"], sub["rmse"]))
-                        sample_map = dict(zip(sub["model"], sub["sample_count"]))
-                        mae_map = dict(zip(sub["model"], sub["mae"]))
+                            rmse_map = dict(zip(sub["model"], sub["rmse"]))
+                            sample_map = dict(zip(sub["model"], sub["sample_count"]))
+                            mae_map = dict(zip(sub["model"], sub["mae"]))
 
-                        weights, is_low_conf = compute_inverse_error_weights(
-                            rmse_by_model=rmse_map,
-                            sample_counts=sample_map,
-                            all_models=BLEND_MODELS,
-                            power=INVERSE_ERROR_POWER,
-                            min_samples=MIN_SAMPLE_THRESHOLD,
-                        )
-
-                        for model, w in weights.items():
-                            records_to_save.append(
-                                {
-                                    "location_id": loc_id,
-                                    "season": season,
-                                    "lead_time_bucket": bucket,
-                                    "variable": var,
-                                    "model": model,
-                                    "weight": w,
-                                    "sample_count": sample_map.get(model, 0),
-                                    "rmse": rmse_map.get(model),
-                                    "mae": mae_map.get(model),
-                                    "low_confidence": 1 if (sample_map.get(model, 0) < MIN_SAMPLE_THRESHOLD or is_low_conf) else 0,
-                                    "updated_at": updated_at,
-                                }
+                            weights, is_low_conf = compute_inverse_error_weights(
+                                rmse_by_model=rmse_map,
+                                sample_counts=sample_map,
+                                all_models=BLEND_MODELS,
+                                power=INVERSE_ERROR_POWER,
+                                min_samples=MIN_SAMPLE_THRESHOLD,
                             )
 
+                            for model, w in weights.items():
+                                records_to_save.append(
+                                    {
+                                        "location_id": loc_id,
+                                        "season": season,
+                                        "regime": regime,
+                                        "lead_time_bucket": bucket,
+                                        "variable": var,
+                                        "model": model,
+                                        "weight": w,
+                                        "sample_count": sample_map.get(model, 0),
+                                        "rmse": rmse_map.get(model),
+                                        "mae": mae_map.get(model),
+                                        "low_confidence": 1 if (sample_map.get(model, 0) < MIN_SAMPLE_THRESHOLD or is_low_conf) else 0,
+                                        "updated_at": updated_at,
+                                    }
+                                )
 
         if records_to_save:
             df_weights = pd.DataFrame(records_to_save)
@@ -174,31 +183,50 @@ class WeightEngine:
 
         return pd.DataFrame()
 
+
     def get_weights_for_location(
         self,
         location_id: str,
         season: str,
         lead_time_bucket: str = "all",
+        regime: str = "all_regimes",
     ) -> Dict[str, Dict[str, float]]:
         """Retrieve weights dictionary formatted as Dict[variable, Dict[model, weight]].
-        
+
+        Fallback chain:
+          1. regime-specific weights (e.g. 'monsoon_active')
+          2. 'all_regimes' aggregate (if regime-specific is empty)
+          3. equal weighting among BLEND_MODELS (if nothing in DB)
+
         Directly compatible with ForecastBlendEngine.blend(weights=...).
         """
         df = self.db.get_model_weights(
             location_id=location_id,
             season=season,
+            regime=regime,
             lead_time_bucket=lead_time_bucket,
         )
 
+        # Fallback 1: regime not found → try all_regimes sentinel
+        if df.empty and regime != "all_regimes":
+            df = self.db.get_model_weights(
+                location_id=location_id,
+                season=season,
+                regime="all_regimes",
+                lead_time_bucket=lead_time_bucket,
+            )
+
+        # Fallback 2: lead-time bucket not found → try "all" aggregate
         if df.empty and lead_time_bucket != "all":
             df = self.db.get_model_weights(
                 location_id=location_id,
                 season=season,
+                regime="all_regimes",
                 lead_time_bucket="all",
             )
 
         if df.empty:
-            # Fallback to equal weighting
+            # Fallback 3: equal weighting
             equal = 1.0 / len(BLEND_MODELS)
             return {
                 var: {m: equal for m in BLEND_MODELS}
@@ -211,22 +239,41 @@ class WeightEngine:
 
         return result
 
+
     def get_dominant_model_map(
         self,
         season: str = "monsoon",
         lead_time_bucket: str = "all",
         variable: str = "temperature_2m",
+        regime: str = "all_regimes",
     ) -> pd.DataFrame:
-        """Return the highest-weighted model per station for map visualization."""
+        """Return the highest-weighted model per station for map visualization.
+
+        Args:
+            season: Season name.
+            lead_time_bucket: Lead-time bucket (defaults to 'all').
+            variable: Forecast variable.
+            regime: Weather regime ('all_regimes', 'monsoon_active', 'monsoon_break',
+                    'off_season').  Defaults to 'all_regimes' aggregate.
+        """
         df = self.db.get_model_weights(
             season=season,
+            regime=regime,
             lead_time_bucket=lead_time_bucket,
             variable=variable,
         )
         if df.empty and lead_time_bucket != "all":
             df = self.db.get_model_weights(
                 season=season,
+                regime=regime,
                 lead_time_bucket="all",
+                variable=variable,
+            )
+        if df.empty and regime != "all_regimes":
+            df = self.db.get_model_weights(
+                season=season,
+                regime="all_regimes",
+                lead_time_bucket=lead_time_bucket,
                 variable=variable,
             )
 
@@ -268,3 +315,4 @@ class WeightEngine:
                 )
 
         return pd.DataFrame(rows)
+

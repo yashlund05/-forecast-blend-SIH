@@ -476,10 +476,10 @@ with tab_weight_map:
     st.subheader("🗺️ National Model Weight Map (Which Source Is Trusted Where, and Why)")
     st.caption(
         "Visualizes dominant forecast models per station based on empirical error backtesting. "
-        "Weights adapt dynamically by season, topography, and meteorological variable."
+        "Weights adapt dynamically by season, regime, topography, and meteorological variable."
     )
 
-    c_map1, c_map2, c_map3 = st.columns(3)
+    c_map1, c_map2, c_map3, c_map4 = st.columns(4)
     with c_map1:
         map_season = st.selectbox(
             "Select Season",
@@ -488,13 +488,27 @@ with tab_weight_map:
             format_func=lambda s: s.capitalize(),
         )
     with c_map2:
+        map_regime = st.selectbox(
+            "Weather Regime",
+            options=["all_regimes", "monsoon_active", "monsoon_break", "off_season"],
+            index=0,
+            format_func=lambda r: {
+                "all_regimes": "All Regimes (aggregate)",
+                "monsoon_active": "🌧️ Monsoon Active",
+                "monsoon_break": "☀️ Monsoon Break",
+                "off_season": "❄️ Off-Season",
+            }.get(r, r),
+            help="Weather regime inferred from rolling 7-day precipitation anomaly. "
+                 "See blending/regime.py for classification logic.",
+        )
+    with c_map3:
         map_lead_bucket = st.selectbox(
             "Lead-Time Bucket",
             options=list(LEAD_TIME_BUCKETS.keys()),
             index=0,
             format_func=lambda b: "All Lead Times (0-168h)" if b == "all" else f"Day {1 if b=='0-24h' else '2-3' if b=='24-72h' else '4-5' if b=='72-120h' else '6-7'} ({b})",
         )
-    with c_map3:
+    with c_map4:
         map_var = st.selectbox(
             "Meteorological Variable",
             options=["temperature_2m", "precipitation", "wind_speed_10m"],
@@ -506,6 +520,7 @@ with tab_weight_map:
     # Query dominant model data across all 10 locations
     map_df = weight_engine.get_dominant_model_map(
         season=map_season,
+        regime=map_regime,
         lead_time_bucket=map_lead_bucket,
         variable=map_var,
     )
@@ -553,7 +568,7 @@ with tab_weight_map:
         )
 
     map_fig.update_layout(
-        title=f"<b>Dominant Model by Region: {map_season.capitalize()} ({map_var.replace('_', ' ').capitalize()})</b>",
+        title=f"<b>Dominant Model by Region: {map_season.capitalize()} | {map_regime.replace('_', ' ').title()} ({map_var.replace('_', ' ').capitalize()})</b>",
         geo=dict(
             scope="asia",
             center=dict(lat=21.5, lon=82.5),
@@ -589,7 +604,8 @@ with tab_weight_map:
         st.markdown(
             f"""
             <div class="metric-card">
-                <b>Season & Regime</b>: {map_season.upper()}<br>
+                <b>Season</b>: {map_season.upper()}<br>
+                <b>Regime</b>: {map_regime.replace('_', ' ').title()}<br>
                 <b>Lead-Time Horizon</b>: {map_lead_bucket} ({LEAD_TIME_BUCKETS[map_lead_bucket][0]}-{LEAD_TIME_BUCKETS[map_lead_bucket][1]}h)<br>
                 <b>Calibrated Stations</b>: {len(map_df)}<br>
                 <b>Inverse Power</b>: $p=2$ (sharp bust penalty)
@@ -603,6 +619,7 @@ with tab_weight_map:
     st.subheader("📊 Comparative Model Weight Distribution Across All 10 Stations")
     all_weights_df = db_manager.get_model_weights(
         season=map_season,
+        regime=map_regime,
         lead_time_bucket=map_lead_bucket,
         variable=map_var,
     )
@@ -894,6 +911,71 @@ with tab_verification:
     contingency_view.columns = ["Station", "Variable", "Samples", "Hits (H)", "False Alarms (FA)", "Misses (M)", "POD (Hit Rate)", "FAR", "CSI (Threat)", "ETS (Gilbert)"]
     st.dataframe(contingency_view, use_container_width=True, hide_index=True)
 
+    # Regime-Stratified Comparison Panel
+    st.markdown("---")
+    st.subheader("🌦️ Regime-Stratified Blend Performance (Monsoon-Active vs. Break vs. Off-Season)")
+    st.caption(
+        "Breaks the TEST-period results down by detected weather regime "
+        "(monsoon_active / monsoon_break / off_season) computed from rolling 7-day "
+        "precipitation. This is the key evidence that regime conditioning adds genuine "
+        "value beyond season-level weighting."
+    )
+
+    with st.expander("📊 Load Regime-Stratified Breakdown (click to compute — ~20s)", expanded=False):
+        try:
+            regime_result = verif_engine.evaluate_regime_stratified()
+            regime_df = regime_result["regime_df"]
+
+            if regime_df.empty:
+                st.warning("No regime-stratified data available — TEST period observations may not cover all regimes.")
+            else:
+                # Aggregate by regime × variable
+                regime_agg = (
+                    regime_df.groupby(["regime", "variable"])
+                    .agg(
+                        n_samples=("n_samples", "sum"),
+                        rmse_blend=("rmse_blend", "mean"),
+                        rmse_naive=("rmse_naive", "mean"),
+                        pct_imp=("pct_imp_vs_naive", "mean"),
+                        blend_wins_pct=("blend_wins", "mean"),
+                    )
+                    .reset_index()
+                )
+                regime_agg["pct_imp"] = regime_agg["pct_imp"].round(2)
+                regime_agg["rmse_blend"] = regime_agg["rmse_blend"].round(3)
+                regime_agg["rmse_naive"] = regime_agg["rmse_naive"].round(3)
+                regime_agg["blend_wins_pct"] = (regime_agg["blend_wins_pct"] * 100).round(1)
+
+                st.dataframe(
+                    regime_agg.rename(columns={
+                        "regime": "Regime", "variable": "Variable",
+                        "n_samples": "Samples", "rmse_blend": "Blend RMSE",
+                        "rmse_naive": "Naive RMSE", "pct_imp": "% Improvement vs Naive",
+                        "blend_wins_pct": "% Stations Blend Wins",
+                    }),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
+                # Regime failure callout (Hard Rule 5 compliance)
+                regime_failures = regime_df[~regime_df["blend_wins"]]
+                if not regime_failures.empty:
+                    st.warning(
+                        f"**Honest Reporting (Hard Rule 5):** Regime-conditioned blend underperforms naive blend "
+                        f"in **{len(regime_failures)} of {len(regime_df)} (regime, variable, station) cells** "
+                        f"during the TEST period. These are real results — not filtered out."
+                    )
+                    st.dataframe(
+                        regime_failures[["station_name", "regime", "variable", "rmse_blend", "rmse_naive", "pct_imp_vs_naive"]].rename(
+                            columns={"station_name": "Station", "regime": "Regime", "variable": "Variable",
+                                     "rmse_blend": "Blend RMSE", "rmse_naive": "Naive RMSE", "pct_imp_vs_naive": "% Δ vs Naive"}
+                        ),
+                        use_container_width=True,
+                        hide_index=True,
+                    )
+        except Exception as e:
+            st.error(f"Regime stratified evaluation failed: {e}")
+
     # Hard Rule 5: Honest Failure Cases Section
     st.subheader("🔍 Transparent Limitations & Failure Cases (AGENTS.md Hard Rule 5)")
     st.markdown(
@@ -919,6 +1001,7 @@ with tab_verification:
     else:
         st.info("No failure cases detected in current sample.")
 
+
     # Export Verification Metrics (Phase 7 Deliverable)
     st.markdown("---")
     st.subheader("📥 Export Test Period Verification Metrics")
@@ -943,21 +1026,34 @@ with tab_verification:
         )
 
     # -----------------------------------------------------------------
-    # Regime-Gated ML Blending Model Upgrade (Phase 7 Stretch)
+    # Regime-Gated ML Blending — Implemented Core Feature
     # -----------------------------------------------------------------
     st.markdown("---")
-    with st.expander("🤖 Advanced Regime-Gated ML Blending Upgrade (Phase 7 Stretch — GBDT / LightGBM Algorithm)"):
+    with st.expander("🤖 Regime-Gated GBDT Blend — Core Implemented Feature (train & evaluate on held-out TEST period)"):
         st.markdown(
             """
-            **Continuous Atmospheric Regime Conditioning**:  
-            While static inverse-error weights condition on discrete buckets `(station, season, lead_time_bucket)`,
-            the **Regime-Gated Gradient Boosted Decision Tree (GBDT)** dynamically conditions multi-model combination on continuous covariates:
-            - Multi-model ensemble mean & standard deviation (inter-model spread / uncertainty)
-            - Diurnal radiation cycle (hour of day)
-            - Seasonal progression (month)
-            - Topography classification (plains, coastal, arid, hill, deltaic)
-            
+            **Regime-Conditioned Multi-Model Blending (implemented)**:
+
+            Two complementary regime-conditioning paths are now live in this build:
+
+            1. **Regime-Stratified Inverse-Error Weights** (default blending path):
+               Weights are conditioned on `(station × season × regime × lead_time_bucket)`.
+               Regime is classified in real-time from rolling 7-day precipitation anomaly:
+               *monsoon_active* / *monsoon_break* / *off_season*.
+               See `blending/regime.py` and `weighting/weights.py`.
+
+            2. **Regime-Gated Gradient Boosted Decision Tree (GBDT)** (optional upgrade path):
+               The GBDT receives `regime_code` (integer-encoded atmospheric regime) as an
+               additional continuous feature alongside ensemble mean/spread, diurnal cycle,
+               month, and topography class — making regime a learned, continuous conditioning
+               variable rather than a discrete lookup key.
+
             *Strictly trained on TRAIN period (2021-09-01 to 2024-04-30) and evaluated on held-out TEST period (2024-07-01 to 2024-08-31) with zero data leakage.*
+
+            **Note on cyclone-influence regime**: Evaluated but dropped — only 5–74 / 24,792
+            observations (0.0–0.3%) in the TRAIN period met the wind threshold for three
+            cyclone-exposed stations (Kolkata, Bhubaneswar, Thiruvananthapuram). Sample sizes
+            are below the MIN_SAMPLE_THRESHOLD of 30 per conditioning cell. See `blending/regime.py` for full documentation.
             """
         )
 

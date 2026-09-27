@@ -62,11 +62,13 @@ move to the next phase with a broken build.
 - [x] Wire alert generation to the extreme module's output
 - [x] Display alerts on dashboard
 
-## Phase 7 — Polish / stretch (only if time remains)
-- [x] Regime-gated ML model (LightGBM / HistGradientBoosting) replacing static inverse-error weights
-- [x] Explainability panel (simple "why this weight" trace, doesn't need full SHAP)
-- [x] CSV/JSON export button
+## Phase 7 — Polish & Advanced Features (Completed)
+- [x] Weather regime conditioning: operational active/break/off-season classification (blending/regime.py) & regime-stratified inverse weights (9,600 rows in SQLite)
+- [x] Regime-gated ML model (HistGradientBoosting / LightGBM algorithm) trained with continuous atmospheric covariates + regime_code
+- [x] Explainability panel (mathematical derivation trace & physical meteorological rationale)
+- [x] CSV/JSON export button for verification metrics
 - [x] Scheduler status indicator on dashboard
+
 
 ## Pre-demo checklist
 - [x] Full pipeline runs live in front of judges without manual data injection

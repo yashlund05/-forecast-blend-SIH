@@ -79,10 +79,30 @@ In accordance with ARCHITECTURE.md Module 2's `location x season x lead-time x s
 > - **Temperature Stability**: Temperature blending maintains a consistent ~32-33% error reduction over naive averaging across all lead-time horizons.
 
 
+### Verification Breakdown by Weather Regime (Monsoon Split)
+
+Conditioning weights on detected weather regimes (*monsoon_active* / *monsoon_break* / *off_season*) accounts for shifting error profiles across dynamic synoptic states:
+
+| Regime | Variable | Test Samples ($N$) | Naive Blend RMSE | Learned Blend RMSE | % Error Reduction vs. Naive | Blend Win Rate |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
+| **Monsoon Active** | Temperature (2m) | 7,644 | 1.198 °C | **0.826 °C** | **+27.68%** | **100.0%** (10/10 stations) |
+| **Monsoon Active** | Precipitation | 7,644 | 1.384 mm | **1.350 mm** | **+2.17%** | **80.0%** (8/10 stations) |
+| **Monsoon Active** | Wind Speed (10m) | 7,644 | 2.850 km/h | **2.735 km/h** | **+3.86%** | **60.0%** (6/10 stations) |
+| **Monsoon Break** | Temperature (2m) | 6,996 | 1.275 °C | **0.923 °C** | **+24.88%** | **90.0%** (9/10 stations) |
+| **Monsoon Break** | Precipitation | 6,996 | 0.864 mm | **0.795 mm** | **+7.36%** | **90.0%** (9/10 stations) |
+| **Monsoon Break** | Wind Speed (10m) | 6,996 | 2.951 km/h | **2.741 km/h** | **+6.46%** | **100.0%** (10/10 stations) |
+
+> [!NOTE]
+> **Key Regime Dynamics & Hard Rule 5 Audit**:
+> - **Precipitation Skill Jumps in Monsoon Breaks**: The relative error reduction for precipitation nearly triples during break conditions (**+7.36%** in break vs. **+2.17%** in active). During active convective surges, all physical models predict widespread rain, reducing spread; during break phases, sporadic convective false alarms plague single models, making inverse-error weighting substantially more effective at dampening noise.
+> - **Transparent Underperformance (8 / 60 cells)**: The regime blend underperformed naive averaging in 8 localized cells (e.g. Delhi active precipitation, Chennai active wind speed, Shimla break temperature). These real edge cases are documented in Tab 3 and not suppressed.
+> - **Cyclone Influence Documented & Dropped**: Synoptic gale/cyclone flag was evaluated but dropped from the weight conditioning matrix due to extreme sparsity (0.0%–0.3% frequency in 24,792 training records; see `blending/regime.py`).
+
 ### Regime-Gated Gradient Boosted Decision Tree (GBDT) Evaluation (`temperature_2m`)
 - **Training Samples** ($N_{\text{train}}$): `20,880` (`2021-09-01` to `2024-04-30`)
 - **Test Samples** ($N_{\text{test}}$): `14,640` (`2024-07-01` to `2024-08-31`)
 - **GBDT RMSE**: `0.872 °C`
+- **Features Used**: Multi-model forecasts (GFS, ICON, IFS), ensemble mean, ensemble spread, hour of day, month, topography code, and **`regime_code`**.
 - **Comparison**:
   - GBDT vs. Naive Equal Blend (`1.247 °C`): **+30.07% error reduction**
   - GBDT vs. Calibrated Station Static Blend (`0.840 °C`): **-3.77%** (Static inverse-error blend performs slightly better due to smooth variance minimization without decision tree binning noise).
