@@ -22,11 +22,11 @@ move to the next phase with a broken build.
 **Milestone check**: can pull and store forecasts for all 10 locations from all sources.
 
 ## Phase 2 — Baseline blend + minimal dashboard (MVP)
-- [ ] Compute simple weighted average blend (start with equal weights if skill engine isn't
+- [x] Compute simple weighted average blend (start with equal weights if skill engine isn't
       ready yet — get the plumbing working first)
-- [ ] Build minimal Streamlit (or chosen frontend) view: pick a location, show individual model
+- [x] Build minimal Streamlit (or chosen frontend) view: pick a location, show individual model
       forecasts + blended forecast on one chart
-- [ ] Confirm this runs end-to-end live (not from a static/cached file) before moving on
+- [x] Confirm this runs end-to-end live (not from a static/cached file) before moving on
 
 **Milestone check**: this is your fallback demo if nothing else finishes — must work standalone.
 
