@@ -916,11 +916,13 @@ with tab_verification:
             with m_col1:
                 st.metric("Regime-Gated GBDT RMSE", f"{res_ml.rmse_ml_gated:.3f} °C", delta=f"-{res_ml.pct_imp_vs_naive:.1f}% vs Naive", delta_color="inverse")
             with m_col2:
-                st.metric("Static Inverse Blend RMSE", f"{res_ml.rmse_static_blend:.3f} °C", delta=f"-{res_ml.pct_imp_vs_static:.1f}% by GBDT", delta_color="inverse")
+                pct_stat_vs_naive = ((res_ml.rmse_naive - res_ml.rmse_static_blend) / res_ml.rmse_naive) * 100.0
+                st.metric("Static Inverse Blend RMSE", f"{res_ml.rmse_static_blend:.3f} °C", delta=f"-{pct_stat_vs_naive:.1f}% vs Naive", delta_color="inverse")
             with m_col3:
                 st.metric("Naive Equal Blend RMSE", f"{res_ml.rmse_naive:.3f} °C")
             with m_col4:
                 st.metric("Best Single Model (IFS) RMSE", f"{res_ml.rmse_ifs:.3f} °C")
+
 
             # Comparative Bar Chart
             ml_comp_fig = go.Figure()

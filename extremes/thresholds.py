@@ -240,8 +240,11 @@ def classify_squall(wind_kmh: float) -> Tuple[str, str]:
 def classify_gale(wind_kmh: float) -> Tuple[str, str]:
     """Classify synoptic / maritime cyclone-associated sustained gale winds.
     
-    Source: IMD SOP (March 2021), Chapter 10 Table 10.7, page 249 & Chapter 8 Cyclone Warning.
-    Governs: Chapter 10 synoptic-scale depressions, deep depressions, and maritime gales.
+    Source: IMD SOP (March 2021), Chapter 10 "Multi-Hazard Early Warning System",
+    Section 10.3.1 Table 10.7 (Gale Winds & Fishermen Warning), page 249;
+    and Chapter 12 "Marine Weather Forecasting Services", Section 12.8.2
+    (Criteria for issuing fisherman warning), page 285 & Section 12.11 Table 12.7, page 289.
+    Governs: Chapter 10 and Chapter 12 synoptic depressions, deep depressions, and maritime gales.
     
     Returns:
         (category_name, alert_level)

@@ -167,14 +167,28 @@ class RegimeGatedBlendEngine:
         y_ifs = test_df["ecmwf_ifs"].values
         y_naive = (y_gfs + y_icon + y_ifs) / 3.0
 
-        # Retrieve static inverse-error weights for comparison
-        # (Average across stations for overall evaluation)
-        static_weights = {"gfs": 0.28, "icon": 0.28, "ecmwf_ifs": 0.44}
-        y_static = (
-            y_gfs * static_weights["gfs"]
-            + y_icon * static_weights["icon"]
-            + y_ifs * static_weights["ecmwf_ifs"]
-        )
+        # Retrieve actual station-specific calibrated inverse-error weights from SQLite
+        weights_df = self.db.get_model_weights(season="monsoon", variable=variable)
+        station_weights: Dict[str, Dict[str, float]] = {}
+        if not weights_df.empty:
+            for loc, grp in weights_df.groupby("location_id"):
+                avail = grp[grp["model"].isin(["gfs", "icon", "ecmwf_ifs"])]
+                tot = avail["weight"].sum()
+                if tot > 0:
+                    station_weights[loc] = {r["model"]: r["weight"] / tot for _, r in avail.iterrows()}
+
+        y_static_list = []
+        for _, row in test_df.iterrows():
+            loc = row["location_id"]
+            w = station_weights.get(loc, {"gfs": 0.333, "icon": 0.333, "ecmwf_ifs": 0.334})
+            val = (
+                row["gfs"] * w.get("gfs", 0.333)
+                + row["icon"] * w.get("icon", 0.333)
+                + row["ecmwf_ifs"] * w.get("ecmwf_ifs", 0.334)
+            )
+            y_static_list.append(val)
+        y_static = np.array(y_static_list)
+
 
         rmse_gfs = float(np.sqrt(np.mean((y_gfs - y_test) ** 2)))
         rmse_icon = float(np.sqrt(np.mean((y_icon - y_test) ** 2)))
