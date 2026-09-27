@@ -800,9 +800,9 @@ with tab_extremes:
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         st.metric(
-            f"Observed Actual ({cs_result.variable.title()})",
+            f"Reanalysis-Archive Value ({cs_result.variable.title()})",
             f"{m_obs:.1f} {unit_str}",
-            help="Ground-truth reanalysis observation recorded on station.",
+            help="Reanalysis-archive value retrieved from Open-Meteo historical archive (ERA5). Cross-checked for Delhi 31 July 2024 with IMD reports: Safdarjung recorded 108 mm, Mayur Vihar recorded up to 147 mm.",
         )
     with c2:
         diff_blend = m_blend["diff"]
@@ -838,13 +838,13 @@ with tab_extremes:
     cs_fig = go.Figure()
     times = pd.to_datetime(hdf["target_time"])
 
-    # Observed
+    # Reanalysis Archive
     cs_fig.add_trace(
         go.Scatter(
             x=times,
             y=hdf["observed"],
             mode="lines+markers",
-            name="Ground Truth Observed",
+            name="Reanalysis-Archive Value (Open-Meteo / ERA5)",
             line=dict(color="#111111", width=3.5),
             marker=dict(size=6),
         )
@@ -905,7 +905,7 @@ with tab_extremes:
 
     scorecard_rows = []
     source_display_names = {
-        "observed": "Ground Truth Observed",
+        "observed": "Reanalysis-Archive Value (Open-Meteo Archive / ERA5)",
         "learned_blend": "Dynamic Learned Blend",
         "naive_blend": "Naive Equal Blend",
         "ecmwf_ifs": "ECMWF IFS (Physics)",
@@ -924,7 +924,7 @@ with tab_extremes:
 
             # Match status
             if src_key == "observed":
-                match_status = "🎯 Ground Truth Reference"
+                match_status = "🎯 Reanalysis-Archive Reference"
             elif alt_lvl == obs_alert_level:
                 match_status = "✅ Exact Alert Level Match"
             elif alt_lvl == "GREEN" and obs_alert_level in ["YELLOW", "ORANGE", "RED"]:

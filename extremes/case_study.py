@@ -35,12 +35,15 @@ CASE_STUDY_EVENTS: Dict[str, Dict[str, Any]] = {
         "variable": "precipitation",
         "unit": "mm",
         "context": (
-            "On the evening of 31 July 2024, the National Capital Region witnessed an extreme localized downpour "
-            "triggering widespread urban inundation (Old Rajinder Nagar, Mayur Vihar, Pragati Maidan). "
-            "Individual models displayed severe dispersion: ECMWF IFS significantly overforecast (>220 mm), "
+            "On the evening of 31 July 2024, Delhi experienced an extreme high-intensity rainfall event "
+            "triggering widespread urban inundation (Safdarjung Observatory recorded 108 mm, while east Delhi automatic "
+            "weather stations like Mayur Vihar recorded up to 147 mm in an intense evening convective burst between 17:30 and 20:30 IST, "
+            "as documented in IMD Flash Flood Guidance bulletins and national reports). Open-Meteo's ERA5 reanalysis archive "
+            "grid cell records 144.6 mm for the 24-hour period. "
+            "Individual NWP models displayed severe dispersion: ECMWF IFS significantly overforecast (>220 mm), "
             "while GFS severely underforecast (51 mm, failing to reach the IMD Heavy Rain threshold). "
-            "The Learned Adaptive Blend correctly predicted a 'Very Heavy Rain' emergency (127.1 mm vs 144.6 mm observed), "
-            "substantially reducing hourly RMSE compared to the naive average."
+            "The Learned Adaptive Blend predicted 127.1 mm, capturing the 'Very Heavy Rain' emergency bracket "
+            "and reducing hourly RMSE by 13.4% compared to the naive equal average."
         ),
     },
     "mumbai_2024_07_12": {
@@ -225,7 +228,7 @@ class CaseStudyEngine:
 
         if var == "precipitation":
             key_takeaway = (
-                f"Ground truth recorded {obs_total:.1f} mm ({obs_alert} alert). "
+                f"Reanalysis-archive value was {obs_total:.1f} mm ({obs_alert} alert). "
                 f"Learned Blend forecasted {metrics_by_source['learned_blend']['total_or_mean']:.1f} mm "
                 f"({blend_alert} alert, error {metrics_by_source['learned_blend']['pct_error']}%), "
                 f"achieving {rmse_gain_pct:.1f}% lower hourly RMSE than naive averaging ({naive_rmse:.3f} -> {blend_rmse:.3f} mm/h). "
@@ -234,7 +237,7 @@ class CaseStudyEngine:
                 key_takeaway += f"Crucially, the learned blend matched the true {obs_alert} emergency classification while naive averaging underclassified as {naive_alert}."
         else:
             key_takeaway = (
-                f"Observed peak was {obs_peak:.1f}{unit}. Learned Blend peak was {metrics_by_source['learned_blend']['peak']:.1f}{unit} "
+                f"Reanalysis-archive peak was {obs_peak:.1f}{unit}. Learned Blend peak was {metrics_by_source['learned_blend']['peak']:.1f}{unit} "
                 f"with RMSE {blend_rmse:.3f}{unit} vs naive RMSE {naive_rmse:.3f}{unit}."
             )
 

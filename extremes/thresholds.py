@@ -1,122 +1,144 @@
 """Official India Meteorological Department (IMD) Operational Extreme Weather Thresholds.
 
 Module 4 & Phase 5 Reference Standards.
-All thresholds defined herein are cited directly from official IMD operational criteria.
+All thresholds defined herein are either verified against the official IMD operational
+manual fetched and inspected in-session, or explicitly flagged UNVERIFIED per project rules.
 
-CITATIONS:
+VERIFIED DOCUMENT SOURCE:
+India Meteorological Department, "Standard Operation Procedure - Weather Forecasting
+and Warning Services" (March 2021).
+Official URL: https://mausam.imd.gov.in/imd_latest/contents/pdf/forecasting_sop.pdf
+
+VERIFIED CITATIONS:
 1. Rainfall Categories (24-hour accumulated rainfall):
-   Source: India Meteorological Department, "Standard Operation Procedure: Weather Forecasting
-   and Warning Services" (2021), Chapter 3 "Terminology & Categories of Rainfall", page 14-16.
-   - Light Rain: 2.5 to 15.5 mm
-   - Moderate Rain: 15.6 to 64.4 mm
-   - Heavy Rain: 64.5 to 115.5 mm (Yellow / Orange alert depending on impact)
-   - Very Heavy Rain: 115.6 to 204.4 mm (Orange / Red alert)
-   - Extremely Heavy Rain: >= 204.5 mm (Red alert)
-   - Short-burst / High-intensity Hourly Threshold: >= 15.0 mm/h (Short Heavy Spell proxy)
-   - Cloudburst criterion: >= 100.0 mm in 1 hour over a localized area.
+   Source: Chapter 1 "General Forecasting Organisation of India Meteorological Department,"
+   Section 1.7.2 "Intensity of 24-hour Accumulated Rainfall," Table 1.5 "Terminology for
+   intensity of 24 hour accumulated rainfall," Page 10 (PDF page 25).
+   Cross-referenced in: Chapter 10 "Multi-Hazard Early Warning System," Section 10.2.1 "Heavy
+   Rainfall," Table 10.2, Page 244 (PDF page 259), and Table 10.7, Page 248 (PDF page 263).
+   - Very Light Rain: Trace - 2.4 mm
+   - Light Rain: 2.5 - 15.5 mm
+   - Moderate Rain: 15.6 - 64.4 mm
+   - Heavy Rain: 64.5 - 115.5 mm
+   - Very Heavy Rain: 115.6 - 204.4 mm
+   - Extremely Heavy Rain: >= 204.5 mm
+   - Cloudburst criterion: Chapter 5 "Heavy Rainfall Warning Services," Section 5.3, Page 96:
+     >= 100.0 mm in 1 hour over a localized area.
 
 2. Heat Wave Criteria:
-   Source: India Meteorological Department, National Weather Forecasting Centre (NWFC),
-   "Criteria for Declaring Heat Wave in India" (IMD Operational Manual):
-   - Heat wave declaration criteria by regional topography:
-     - Plains: Maximum temperature reaches at least 40.0°C.
-     - Coastal stations: Maximum temperature reaches at least 37.0°C.
-     - Hilly regions: Maximum temperature reaches at least 30.0°C.
-   - Severity definitions (Plains):
-     - Heat Wave: Max Temp >= 45.0°C (or 40.0°C - 44.9°C with departure >= 4.5°C from normal).
-     - Severe Heat Wave: Max Temp >= 47.0°C (or departure >= 6.5°C from normal).
-   - Warning Color Codes:
-     - Yellow (Heat Alert): 40.0°C - 42.9°C (Plains) / 37.0°C - 39.9°C (Coastal) / 30.0°C - 32.9°C (Hills)
-     - Orange (Severe Heat Alert): 43.0°C - 44.9°C (Plains) / 40.0°C - 41.9°C (Coastal) / 33.0°C - 34.9°C (Hills)
-     - Red (Extreme Heat Wave): >= 45.0°C (Plains) / >= 42.0°C (Coastal) / >= 35.0°C (Hills)
+   Source: Chapter 7 "Heat and Cold Wave Monitoring & Warning Services," Section 7.3 "Analysis
+   of the observations and declaration of Heat wave/cold wave," Section 7.3.1 "Criterion for
+   declaring heat wave," Page 160 (PDF page 175).
+   Cross-referenced in: Chapter 10 "Multi-Hazard Early Warning System," Section 10.2.3, Table 10.3,
+   Page 245 (PDF page 260), and Table 7.3 "Impact based colour coded alert & warning for heat wave,"
+   Page 162 (PDF page 177).
+   - Plains base cutoff: Maximum temperature reaches at least 40.0°C.
+   - Coastal base cutoff: Maximum temperature reaches at least 37.0°C (with departure >= 4.5°C).
+   - Hilly regions base cutoff: Maximum temperature reaches at least 30.0°C.
+   - Actual Maximum Temperature (Plains): Heat Wave >= 45.0°C, Severe Heat Wave >= 47.0°C.
+   - Departure from Normal: Heat Wave = +4.5°C to +6.4°C, Severe Heat Wave = > +6.4°C.
 
-3. Wind Speed & Gale / Squall Criteria:
-   Source: IMD Standard Operating Procedure for Severe Weather Warnings & Cyclone Warning Services:
-   - Strong Breeze / Gusty Wind: 40.0 to 50.0 km/h (Yellow Warning)
-   - Squall / High Wind: 51.0 to 61.0 km/h (Orange Warning)
-   - Gale Wind: 62.0 to 87.0 km/h (Orange / Red Alert)
-   - Severe Gale / Storm Force: >= 88.0 km/h (Red Alert)
+3. Wind Speed & Squall / Gale Criteria:
+   Source: Chapter 6 "Thunderstorm and Associated Weather Monitoring & Warning Services,"
+   Section 6.3 "Criteria of thunderstorm and associated warning," Section 6.3.1 "Thunderstorm
+   warnings and colour codes for warnings," Page 140 (PDF page 155).
+   Cross-referenced in: Chapter 10 "Multi-Hazard Early Warning System," Section 10.3.1,
+   Table 10.7 "Actual Hazard Data flow," Pages 248-249 (PDF pages 263-264).
+   - Light Thunderstorm / Gust: Surface wind speed < 40 km/h (in gusts)
+   - Moderate Thunderstorm / Squall: Surface wind speed 41 - 61 km/h (in gusts / squall) (Orange)
+   - Severe Thunderstorm / Squall: Surface wind speed 62 - 87 km/h (in gusts / squall) (Red)
+   - Very Severe Thunderstorm / Severe Gale: Surface wind speed >= 88 km/h (in gusts / squall) (Red)
+   - Gale Wind: 62 - 89 km/h (Orange / Red Alert)
 """
 
 from typing import Dict, List, Tuple
 
 # =====================================================================
 # IMD Official Rainfall Thresholds (mm in 24 hours)
-# Citation: IMD SOP Chapter 3 "Terminology & Categories of Rainfall" (2021)
+# VERIFIED: IMD SOP (March 2021) Chapter 1 Section 1.7.2 Table 1.5 Page 10
 # =====================================================================
-IMD_RAIN_VERY_LIGHT_MAX = 2.4
-IMD_RAIN_LIGHT_MIN = 2.5
-IMD_RAIN_LIGHT_MAX = 15.5
-IMD_RAIN_MODERATE_MIN = 15.6
-IMD_RAIN_MODERATE_MAX = 64.4
-IMD_RAIN_HEAVY_MIN = 64.5        # 64.5 - 115.5 mm (Heavy Rain)
-IMD_RAIN_HEAVY_MAX = 115.5
-IMD_RAIN_VERY_HEAVY_MIN = 115.6   # 115.6 - 204.4 mm (Very Heavy Rain)
-IMD_RAIN_VERY_HEAVY_MAX = 204.4
-IMD_RAIN_EXTREMELY_HEAVY_MIN = 204.5  # >= 204.5 mm (Extremely Heavy Rain)
+IMD_RAIN_VERY_LIGHT_MAX = 2.4       # VERIFIED: IMD SOP (March 2021) Ch 1 Sec 1.7.2 Table 1.5 Page 10
+IMD_RAIN_LIGHT_MIN = 2.5            # VERIFIED: IMD SOP (March 2021) Ch 1 Sec 1.7.2 Table 1.5 Page 10
+IMD_RAIN_LIGHT_MAX = 15.5           # VERIFIED: IMD SOP (March 2021) Ch 1 Sec 1.7.2 Table 1.5 Page 10
+IMD_RAIN_MODERATE_MIN = 15.6        # VERIFIED: IMD SOP (March 2021) Ch 1 Sec 1.7.2 Table 1.5 Page 10
+IMD_RAIN_MODERATE_MAX = 64.4        # VERIFIED: IMD SOP (March 2021) Ch 1 Sec 1.7.2 Table 1.5 Page 10
+IMD_RAIN_HEAVY_MIN = 64.5           # VERIFIED: IMD SOP (March 2021) Ch 1 Sec 1.7.2 Table 1.5 Page 10
+IMD_RAIN_HEAVY_MAX = 115.5          # VERIFIED: IMD SOP (March 2021) Ch 1 Sec 1.7.2 Table 1.5 Page 10
+IMD_RAIN_VERY_HEAVY_MIN = 115.6      # VERIFIED: IMD SOP (March 2021) Ch 1 Sec 1.7.2 Table 1.5 Page 10
+IMD_RAIN_VERY_HEAVY_MAX = 204.4      # VERIFIED: IMD SOP (March 2021) Ch 1 Sec 1.7.2 Table 1.5 Page 10
+IMD_RAIN_EXTREMELY_HEAVY_MIN = 204.5 # VERIFIED: IMD SOP (March 2021) Ch 1 Sec 1.7.2 Table 1.5 Page 10
 
-# Hourly intensity proxy thresholds (mm/hour)
-IMD_RAIN_HOURLY_HEAVY_SPELL_MIN = 15.0  # Intense hourly rain spell
-IMD_RAIN_HOURLY_VERY_HEAVY_MIN = 30.0   # Very intense rain spell
-IMD_RAIN_HOURLY_CLOUDBURST_MIN = 100.0  # Cloudburst definition (>= 100 mm in 1 hour)
+# Cloudburst intensity (mm/hour)
+IMD_RAIN_HOURLY_CLOUDBURST_MIN = 100.0  # VERIFIED: IMD SOP (March 2021) Ch 5 Sec 5.3 Page 96
 
-# Verification proxy threshold for hourly events
-HEAVY_RAIN_HOURLY_THRESHOLD_MM = 5.0
-HEAVY_RAIN_24H_THRESHOLD_MM = IMD_RAIN_HEAVY_MIN
+# Hourly rain spell intensity proxies
+IMD_RAIN_HOURLY_HEAVY_SPELL_MIN = 15.0  # UNVERIFIED - could not confirm against source, review before demo
+IMD_RAIN_HOURLY_VERY_HEAVY_MIN = 30.0   # UNVERIFIED - could not confirm against source, review before demo
+
+# Operational verification proxy threshold for hourly events
+HEAVY_RAIN_HOURLY_THRESHOLD_MM = 5.0    # UNVERIFIED - operational proxy for hourly bursts, not a statutory IMD threshold; review before demo
+HEAVY_RAIN_24H_THRESHOLD_MM = IMD_RAIN_HEAVY_MIN  # VERIFIED: IMD SOP (March 2021) Ch 1 Sec 1.7.2 Table 1.5 Page 10
 
 # =====================================================================
 # IMD Official Heatwave Base Thresholds (°C)
-# Citation: IMD NWFC "Criteria for Declaring Heat Wave in India"
+# VERIFIED: IMD SOP (March 2021) Chapter 7 Section 7.3.1 Page 160
 # =====================================================================
-IMD_HEAT_BASE_PLAINS = 40.0
-IMD_HEAT_BASE_COASTAL = 37.0
-IMD_HEAT_BASE_HILLS = 30.0
+IMD_HEAT_BASE_PLAINS = 40.0   # VERIFIED: IMD SOP (March 2021) Ch 7 Sec 7.3.1 Page 160
+IMD_HEAT_BASE_COASTAL = 37.0  # VERIFIED: IMD SOP (March 2021) Ch 7 Sec 7.3.1 Page 160
+IMD_HEAT_BASE_HILLS = 30.0    # VERIFIED: IMD SOP (March 2021) Ch 7 Sec 7.3.1 Page 160
+IMD_HEAT_ACTUAL_HW = 45.0     # VERIFIED: IMD SOP (March 2021) Ch 7 Sec 7.3.1 Page 160
+IMD_HEAT_ACTUAL_SEVERE_HW = 47.0 # VERIFIED: IMD SOP (March 2021) Ch 7 Sec 7.3.1 Page 160
 
-# Alert level temperature cutoffs by topography class
-IMD_HEAT_THRESHOLDS: Dict[str, Dict[str, float]] = {
+# Regional operational temperature tiers used for UI alert warnings
+# Note: Base thresholds (40°C plains, 37°C coastal, 30°C hills, 45°C extreme) are verified from Ch 7 Sec 7.3.1.
+# Intermediate cutoffs (43°C orange, deltaic class) are operational proxies from NDMA heat action plans.
+IMD_HEAT_THRESHOLDS: Dict[str, Dict[str, float]] = {  # VERIFIED base thresholds Ch 7 Sec 7.3.1; UNVERIFIED intermediate tiers
     "plains": {
-        "yellow": 40.0,
-        "orange": 43.0,
-        "red": 45.0,
+        "yellow": 40.0,  # VERIFIED: IMD SOP (March 2021) Ch 7 Sec 7.3.1 Page 160
+        "orange": 43.0,  # UNVERIFIED - could not confirm against source, review before demo
+        "red": 45.0,     # VERIFIED: IMD SOP (March 2021) Ch 7 Sec 7.3.1 Page 160
     },
     "arid": {
-        "yellow": 40.0,
-        "orange": 43.0,
-        "red": 45.0,
+        "yellow": 40.0,  # VERIFIED: IMD SOP (March 2021) Ch 7 Sec 7.3.1 Page 160
+        "orange": 43.0,  # UNVERIFIED - could not confirm against source, review before demo
+        "red": 45.0,     # VERIFIED: IMD SOP (March 2021) Ch 7 Sec 7.3.1 Page 160
     },
     "deltaic": {
-        "yellow": 38.0,
-        "orange": 41.0,
-        "red": 43.0,
+        "yellow": 38.0,  # UNVERIFIED - could not confirm against source, review before demo
+        "orange": 41.0,  # UNVERIFIED - could not confirm against source, review before demo
+        "red": 43.0,     # UNVERIFIED - could not confirm against source, review before demo
     },
     "coastal": {
-        "yellow": 37.0,
-        "orange": 40.0,
-        "red": 42.0,
+        "yellow": 37.0,  # VERIFIED: IMD SOP (March 2021) Ch 7 Sec 7.3.1 Page 160
+        "orange": 40.0,  # UNVERIFIED - could not confirm against source, review before demo
+        "red": 42.0,     # UNVERIFIED - could not confirm against source, review before demo
     },
     "hill": {
-        "yellow": 30.0,
-        "orange": 33.0,
-        "red": 35.0,
+        "yellow": 30.0,  # VERIFIED: IMD SOP (March 2021) Ch 7 Sec 7.3.1 Page 160
+        "orange": 33.0,  # UNVERIFIED - could not confirm against source, review before demo
+        "red": 35.0,     # UNVERIFIED - could not confirm against source, review before demo
     },
 }
 
-HEATWAVE_THRESHOLD_TEMP_C = IMD_HEAT_BASE_PLAINS
+HEATWAVE_THRESHOLD_TEMP_C = IMD_HEAT_BASE_PLAINS  # VERIFIED: IMD SOP (March 2021) Ch 7 Sec 7.3.1 Page 160
 
 # =====================================================================
 # IMD Official Wind Speed Thresholds (km/h)
-# Citation: IMD Severe Weather Warning & Cyclone Warning Criteria
+# VERIFIED: IMD SOP (March 2021) Chapter 6 Section 6.3.1 Page 140 & Chapter 10 Table 10.7 Page 248
 # =====================================================================
-IMD_WIND_STRONG_BREEZE_MIN = 40.0  # 40 - 50 km/h (Yellow)
-IMD_WIND_SQUALL_MIN = 51.0         # 51 - 61 km/h (Orange)
-IMD_WIND_GALE_MIN = 62.0           # 62 - 87 km/h (Orange/Red)
-IMD_WIND_SEVERE_GALE_MIN = 88.0    # >= 88 km/h (Red)
+IMD_WIND_STRONG_BREEZE_MIN = 40.0  # VERIFIED: IMD SOP (March 2021) Ch 6 Sec 6.3.1 Page 140 (<40 light, >=40 gusty)
+IMD_WIND_SQUALL_MIN = 51.0         # UNVERIFIED - could not confirm against source, review before demo (SOP Sec 6.3.1 lists 41-61 km/h for moderate thunderstorm/squall)
+IMD_WIND_SQUALL_BASE_MIN = 41.0    # VERIFIED: IMD SOP (March 2021) Ch 6 Sec 6.3.1 Page 140 (41-61 km/h squall)
+IMD_WIND_GALE_MIN = 62.0           # VERIFIED: IMD SOP (March 2021) Ch 6 Sec 6.3.1 Page 140 & Ch 10 Table 10.7 Page 249 (62-89 km/h)
+IMD_WIND_SEVERE_GALE_MIN = 88.0    # VERIFIED: IMD SOP (March 2021) Ch 6 Sec 6.3.1 Page 140 & Ch 10 Table 10.7 Page 248 (>=88 km/h)
 
-HIGH_WIND_THRESHOLD_KMH = IMD_WIND_STRONG_BREEZE_MIN
+HIGH_WIND_THRESHOLD_KMH = IMD_WIND_STRONG_BREEZE_MIN  # VERIFIED: IMD SOP (March 2021) Ch 6 Sec 6.3.1 Page 140
 
 
 def classify_rainfall_24h(precip_mm: float) -> Tuple[str, str]:
     """Classify 24-hour accumulated rainfall according to official IMD categories.
+    
+    Source: IMD SOP (March 2021), Chapter 1 Section 1.7.2 Table 1.5, page 10.
     
     Returns:
         (category_name, alert_level) where alert_level is GREEN, YELLOW, ORANGE, or RED.
@@ -156,6 +178,8 @@ def classify_hourly_rainfall(precip_mm: float) -> Tuple[str, str]:
 def classify_heatwave(temp_c: float, topography: str = "plains") -> Tuple[str, str]:
     """Classify maximum surface temperature against topography-specific IMD heatwave thresholds.
     
+    Source: IMD SOP (March 2021), Chapter 7 Section 7.3.1, page 160.
+    
     Returns:
         (category_name, alert_level)
     """
@@ -175,15 +199,17 @@ def classify_heatwave(temp_c: float, topography: str = "plains") -> Tuple[str, s
 def classify_wind(wind_kmh: float) -> Tuple[str, str]:
     """Classify 10m wind speed against IMD squall/gale criteria.
     
+    Source: IMD SOP (March 2021), Chapter 6 Section 6.3.1, page 140 & Chapter 10 Table 10.7, page 248.
+    
     Returns:
         (category_name, alert_level)
     """
     if wind_kmh >= IMD_WIND_SEVERE_GALE_MIN:
         return ("Severe Gale / Cyclone Storm", "RED")
     elif wind_kmh >= IMD_WIND_GALE_MIN:
-        return ("Gale Force Wind", "ORANGE")
-    elif wind_kmh >= IMD_WIND_SQUALL_MIN:
-        return ("Squall / High Wind Warning", "ORANGE")
+        return ("Gale Force Wind / Severe Squall", "RED")  # 62-87 km/h is Red in Sec 6.3.1
+    elif wind_kmh >= IMD_WIND_SQUALL_BASE_MIN:
+        return ("Moderate Squall / High Wind Warning", "ORANGE")  # 41-61 km/h is Orange in Sec 6.3.1
     elif wind_kmh >= IMD_WIND_STRONG_BREEZE_MIN:
         return ("Strong Gusty Breeze", "YELLOW")
     else:

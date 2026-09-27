@@ -96,11 +96,11 @@ def test_imd_heatwave_thresholds_by_topography():
 
 
 def test_imd_wind_threshold_classification():
-    """Verify IMD squall and gale criteria."""
+    """Verify IMD squall and gale criteria (IMD SOP Ch 6 Sec 6.3.1)."""
     cat, alert = classify_wind(25.0)
     assert alert == "GREEN"
 
-    cat, alert = classify_wind(45.0)
+    cat, alert = classify_wind(40.5)
     assert "Strong" in cat
     assert alert == "YELLOW"
 
@@ -109,8 +109,8 @@ def test_imd_wind_threshold_classification():
     assert alert == "ORANGE"
 
     cat, alert = classify_wind(70.0)
-    assert "Gale" in cat
-    assert alert == "ORANGE"
+    assert "Gale" in cat or "Squall" in cat
+    assert alert == "RED"
 
     cat, alert = classify_wind(90.0)
     assert "Severe Gale" in cat
@@ -172,3 +172,46 @@ def test_case_study_jaisalmer_heatwave():
     assert result.observed_peak == pytest.approx(42.0, abs=0.5)
     assert result.metrics_by_source["learned_blend"]["peak"] == pytest.approx(42.05, abs=0.5)
     assert result.metrics_by_source["learned_blend"]["rmse"] < result.metrics_by_source["naive_blend"]["rmse"]
+
+
+def test_threshold_citation_or_unverified_flag():
+    """Citation & Labeling Audit Test:
+    
+    Every single threshold constant in extremes/thresholds.py MUST have either:
+    1. An in-session verified citation referencing the IMD SOP (March 2021) with Chapter/Section/Page, OR
+    2. An explicit UNVERIFIED flag ('# UNVERIFIED - could not confirm against source, review before demo').
+    
+    Zero unverified thresholds may be presented as verified.
+    """
+    import re
+    from pathlib import Path
+
+    thresholds_file = Path(__file__).resolve().parent.parent / "extremes" / "thresholds.py"
+    assert thresholds_file.exists(), "extremes/thresholds.py must exist"
+
+    lines = thresholds_file.read_text(encoding="utf-8").splitlines()
+
+    constant_pattern = re.compile(r"^(IMD_[A-Z0-9_]+|HEAVY_[A-Z0-9_]+|HEATWAVE_[A-Z0-9_]+|HIGH_[A-Z0-9_]+)\s*[:=]")
+
+    checked_constants = []
+    for idx, line in enumerate(lines, start=1):
+        match = constant_pattern.match(line.strip())
+        if match:
+            const_name = match.group(1)
+            # Check comment on the same line or immediate previous line
+            same_line_comment = line[line.find("#"):] if "#" in line else ""
+            prev_line_comment = lines[idx - 2] if idx >= 2 and "#" in lines[idx - 2] else ""
+            combined_context = f"{same_line_comment} {prev_line_comment}"
+
+            has_verified = "VERIFIED:" in combined_context and "IMD SOP" in combined_context
+            has_unverified = "UNVERIFIED" in combined_context
+
+            assert has_verified or has_unverified, (
+                f"Threshold constant '{const_name}' at line {idx} in extremes/thresholds.py violates rule: "
+                f"must have either a verified citation ('VERIFIED: IMD SOP (March 2021) ...') "
+                f"or an explicit '# UNVERIFIED' flag."
+            )
+            checked_constants.append(const_name)
+
+    assert len(checked_constants) >= 12, f"Expected at least 12 threshold constants checked, got {len(checked_constants)}"
+
