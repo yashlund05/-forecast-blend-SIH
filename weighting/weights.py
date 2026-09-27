@@ -125,41 +125,46 @@ class WeightEngine:
 
             variables = skill_df["variable"].unique()
             seasons = skill_df["season"].unique()
+            lead_buckets = skill_df["lead_time_bucket"].unique() if "lead_time_bucket" in skill_df.columns else ["all"]
 
             for season in seasons:
-                for var in variables:
-                    sub = skill_df[
-                        (skill_df["season"] == season) & (skill_df["variable"] == var)
-                    ]
+                for bucket in lead_buckets:
+                    for var in variables:
+                        sub = skill_df[
+                            (skill_df["season"] == season)
+                            & (skill_df["lead_time_bucket"] == bucket)
+                            & (skill_df["variable"] == var)
+                        ]
 
-                    rmse_map = dict(zip(sub["model"], sub["rmse"]))
-                    sample_map = dict(zip(sub["model"], sub["sample_count"]))
-                    mae_map = dict(zip(sub["model"], sub["mae"]))
+                        rmse_map = dict(zip(sub["model"], sub["rmse"]))
+                        sample_map = dict(zip(sub["model"], sub["sample_count"]))
+                        mae_map = dict(zip(sub["model"], sub["mae"]))
 
-                    weights, is_low_conf = compute_inverse_error_weights(
-                        rmse_by_model=rmse_map,
-                        sample_counts=sample_map,
-                        all_models=BLEND_MODELS,
-                        power=INVERSE_ERROR_POWER,
-                        min_samples=MIN_SAMPLE_THRESHOLD,
-                    )
-
-                    for model, w in weights.items():
-                        records_to_save.append(
-                            {
-                                "location_id": loc_id,
-                                "season": season,
-                                "lead_time_bucket": "all",
-                                "variable": var,
-                                "model": model,
-                                "weight": w,
-                                "sample_count": sample_map.get(model, 0),
-                                "rmse": rmse_map.get(model),
-                                "mae": mae_map.get(model),
-                                "low_confidence": 1 if (sample_map.get(model, 0) < MIN_SAMPLE_THRESHOLD or is_low_conf) else 0,
-                                "updated_at": updated_at,
-                            }
+                        weights, is_low_conf = compute_inverse_error_weights(
+                            rmse_by_model=rmse_map,
+                            sample_counts=sample_map,
+                            all_models=BLEND_MODELS,
+                            power=INVERSE_ERROR_POWER,
+                            min_samples=MIN_SAMPLE_THRESHOLD,
                         )
+
+                        for model, w in weights.items():
+                            records_to_save.append(
+                                {
+                                    "location_id": loc_id,
+                                    "season": season,
+                                    "lead_time_bucket": bucket,
+                                    "variable": var,
+                                    "model": model,
+                                    "weight": w,
+                                    "sample_count": sample_map.get(model, 0),
+                                    "rmse": rmse_map.get(model),
+                                    "mae": mae_map.get(model),
+                                    "low_confidence": 1 if (sample_map.get(model, 0) < MIN_SAMPLE_THRESHOLD or is_low_conf) else 0,
+                                    "updated_at": updated_at,
+                                }
+                            )
+
 
         if records_to_save:
             df_weights = pd.DataFrame(records_to_save)
@@ -184,6 +189,13 @@ class WeightEngine:
             season=season,
             lead_time_bucket=lead_time_bucket,
         )
+
+        if df.empty and lead_time_bucket != "all":
+            df = self.db.get_model_weights(
+                location_id=location_id,
+                season=season,
+                lead_time_bucket="all",
+            )
 
         if df.empty:
             # Fallback to equal weighting
@@ -211,6 +223,13 @@ class WeightEngine:
             lead_time_bucket=lead_time_bucket,
             variable=variable,
         )
+        if df.empty and lead_time_bucket != "all":
+            df = self.db.get_model_weights(
+                season=season,
+                lead_time_bucket="all",
+                variable=variable,
+            )
+
 
         rows: List[Dict[str, Any]] = []
         for loc_id, cfg in TARGET_LOCATIONS.items():

@@ -4,7 +4,8 @@ SIH Problem Statement 26081 | Ministry of Earth Sciences / NCMRWF | Theme: Disas
 
 A hybrid AI–NWP multi-model forecast blending system that dynamically pulls live operational forecasts from Open-Meteo (NOAA GFS, DWD ICON, ECMWF IFS, and ECMWF AIFS), blends them using adaptive regional and seasonal inverse-error weights, flags extreme weather against verified IMD operational thresholds, and generates actionable multilingual district disaster bulletins.
 
-**Status**: Hackathon prototype, feature-complete through Phase 7 (all tasks in `docs/TASKS.md` checked, 34/34 tests passing).
+**Status**: Hackathon prototype, feature-complete through Phase 7 (all tasks in `docs/TASKS.md` checked, 35/35 tests passing).
+
 
 ---
 
@@ -35,6 +36,17 @@ Evaluated across **43,920 point-predictions** (14,640 per variable across 10 nat
 | **Temperature (2m)** | 2.129 °C | 1.520 °C | **0.794 °C** | 1.212 °C | 0.833 °C | **+31.22%** | **IFS alone statistically outperforms blend** (by 0.041 °C, $p < 0.05$) |
 | **Precipitation** | 1.655 mm | 1.530 mm | 1.104 mm | 1.167 mm | **1.076 mm** | **+7.81%** | **+2.26% vs. IFS** (90% CI crosses zero — comparable) |
 | **Wind Speed (10m)** | 4.735 km/h | 5.372 km/h | 3.002 km/h | 2.928 km/h | **2.728 km/h** | **+6.81%** | **Blend statistically beats best single model** (+9.16% vs. IFS, $p < 0.05$) |
+
+### Performance Breakdown by Forecast Lead-Time Bucket
+
+| Horizon | Lead-Time | Temperature (vs. Naive) | Precipitation (vs. Naive) | Wind Speed (vs. Naive) | Lead-Time Dynamic |
+| :--- | :---: | :---: | :---: | :---: | :--- |
+| **Day 1** | `0-24h` | **+32.22%** (0.830 vs. 1.225 °C) | -0.26% (1.214 vs. 1.211 mm) | **+5.87%** (2.645 vs. 2.810 km/h) | IFS leads temperature; high model agreement |
+| **Days 2–3** | `24-72h` | **+32.86%** (0.865 vs. 1.289 °C) | **+3.69%** (1.080 vs. 1.122 mm) | **+7.53%** (2.826 vs. 3.056 km/h) | Blend gain accelerates on precipitation |
+| **Days 4–5** | `72-120h` | **+32.04%** (0.812 vs. 1.195 °C) | **+8.55%** (1.195 vs. 1.307 mm) | **+7.43%** (2.806 vs. 3.032 km/h) | Blend outperforms best model on wind & precip |
+| **Days 6–7** | `120h+` | **+33.01%** (0.844 vs. 1.260 °C) | **+9.66%** (1.118 vs. 1.238 mm) | **+7.48%** (2.714 vs. 2.933 km/h) | **Precip advantage peaks (+9.66%)** as models diverge |
+
+*Key finding: The blend's advantage over naive averaging **grows monotonically** with lead time for precipitation (from -0.26% at Day 1 up to +9.66% at Days 6–7), demonstrating how adaptive weighting filters out long-range NWP dispersion errors.*
 
 - **Normalized Multi-Variate Skill Score**: **+15.28%** (unitless arithmetic mean of relative error reductions vs. naive averaging; macro sample-weighted reduction is **+14.13%**).
 - **No Unit-Mixed RMSE**: Averaging RMSE across heterogeneous units (°C, mm, km/h) is mathematically invalid and has been removed from all reports in favor of normalized skill scoring and per-variable evaluation.

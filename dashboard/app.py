@@ -491,8 +491,8 @@ with tab_weight_map:
         map_lead_bucket = st.selectbox(
             "Lead-Time Bucket",
             options=list(LEAD_TIME_BUCKETS.keys()),
-            index=3,
-            format_func=lambda b: f"{b.capitalize()} ({LEAD_TIME_BUCKETS[b][0]}-{LEAD_TIME_BUCKETS[b][1]}h)",
+            index=0,
+            format_func=lambda b: "All Lead Times (0-168h)" if b == "all" else f"Day {1 if b=='0-24h' else '2-3' if b=='24-72h' else '4-5' if b=='72-120h' else '6-7'} ({b})",
         )
     with c_map3:
         map_var = st.selectbox(
@@ -501,6 +501,7 @@ with tab_weight_map:
             index=0,
             format_func=lambda v: "Temperature" if "temp" in v else "Precipitation" if "precip" in v else "Wind Speed",
         )
+
 
     # Query dominant model data across all 10 locations
     map_df = weight_engine.get_dominant_model_map(
@@ -589,12 +590,14 @@ with tab_weight_map:
             f"""
             <div class="metric-card">
                 <b>Season & Regime</b>: {map_season.upper()}<br>
+                <b>Lead-Time Horizon</b>: {map_lead_bucket} ({LEAD_TIME_BUCKETS[map_lead_bucket][0]}-{LEAD_TIME_BUCKETS[map_lead_bucket][1]}h)<br>
                 <b>Calibrated Stations</b>: {len(map_df)}<br>
                 <b>Inverse Power</b>: $p=2$ (sharp bust penalty)
             </div>
             """,
             unsafe_allow_html=True,
         )
+
 
     # Comparative Station Weight Breakdown
     st.subheader("📊 Comparative Model Weight Distribution Across All 10 Stations")
@@ -647,7 +650,7 @@ with tab_weight_map:
         "behind model weights for any station and regime."
     )
 
-    exp_col1, exp_col2, exp_col3 = st.columns(3)
+    exp_col1, exp_col2, exp_col3, exp_col4 = st.columns(4)
     with exp_col1:
         exp_loc_name = st.selectbox(
             "Select Station to Explain",
@@ -665,6 +668,14 @@ with tab_weight_map:
             format_func=lambda s: s.capitalize(),
         )
     with exp_col3:
+        exp_lead_bucket = st.selectbox(
+            "Lead-Time Bucket",
+            options=list(LEAD_TIME_BUCKETS.keys()),
+            index=0,
+            key="exp_lead_select",
+            format_func=lambda b: "All Lead Times (0-168h)" if b == "all" else f"Day {1 if b=='0-24h' else '2-3' if b=='24-72h' else '4-5' if b=='72-120h' else '6-7'} ({b})",
+        )
+    with exp_col4:
         exp_var = st.selectbox(
             "Select Variable",
             options=["precipitation", "temperature_2m", "wind_speed_10m"],
@@ -677,8 +688,9 @@ with tab_weight_map:
         location_id=exp_loc_id,
         season=exp_season,
         variable=exp_var,
-        lead_time_bucket="all",
+        lead_time_bucket=exp_lead_bucket,
     )
+
 
     # Mathematical Formula Display
     st.latex(r"W_m = \frac{\frac{1}{\text{RMSE}_m^2 + \epsilon}}{\sum_{k} \frac{1}{\text{RMSE}_k^2 + \epsilon}}")

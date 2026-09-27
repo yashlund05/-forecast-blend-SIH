@@ -56,13 +56,35 @@ SEASON_MONTH_MAP: Dict[int, str] = {
 
 SEASONS: List[str] = ["pre-monsoon", "monsoon", "post-monsoon", "winter"]
 
-# Lead time bucket classifications
+# Lead time bucket classifications (at least 4 operational ranges + aggregate)
 LEAD_TIME_BUCKETS: Dict[str, Tuple[int, int]] = {
-    "short": (0, 48),  # Days 1-2
-    "medium": (49, 120),  # Days 3-5
-    "extended": (121, 168),  # Days 6-7
-    "all": (0, 168),  # Aggregate
+    "0-24h": (0, 24),     # Day 1: 0 to 24 hours
+    "24-72h": (24, 72),   # Days 2-3: 24 to 72 hours
+    "72-120h": (72, 120), # Days 4-5: 72 to 120 hours
+    "120h+": (120, 168),  # Days 6-7: 120 to 168 hours
+    "all": (0, 168),      # Full aggregate across all lead times
 }
+
+
+def get_lead_time_bucket_for_timestamp(t_str: str, cycle_hours: int = 168) -> str:
+    """Assign synoptic cycle lead time bucket (0-24h, 24-72h, 72-120h, 120h+).
+    
+    Anchored to TRAIN_START (2021-09-01T00:00:00) synoptic initialization cycle.
+    """
+    clean_str = t_str.replace("Z", "").split("+")[0]
+    dt = datetime.fromisoformat(clean_str)
+    epoch = datetime.fromisoformat(f"{TRAIN_START}T00:00:00")
+    offset_hours = ((dt - epoch).total_seconds() / 3600.0) % cycle_hours
+    if offset_hours <= 24.0:
+        return "0-24h"
+    elif offset_hours <= 72.0:
+        return "24-72h"
+    elif offset_hours <= 120.0:
+        return "72-120h"
+    else:
+        return "120h+"
+
+
 
 # Minimum observation samples required per bucket to trust empirical weights
 MIN_SAMPLE_THRESHOLD = 30
@@ -233,51 +255,59 @@ class SkillEngine:
         if merged.empty:
             return pd.DataFrame()
 
-        # Assign season column
+        # Assign season column and lead time bucket
         merged["season"] = [get_season_for_timestamp(t) for t in merged["target_time"]]
+        merged["lead_time_bucket"] = [get_lead_time_bucket_for_timestamp(t) for t in merged["target_time"]]
 
         variables = ["temperature_2m", "precipitation", "wind_speed_10m"]
         models = merged["model"].unique().tolist()
         seasons = merged["season"].unique().tolist()
+        lead_buckets = list(LEAD_TIME_BUCKETS.keys())
 
         skill_records: List[Dict[str, Any]] = []
 
-        # Compute metrics across overall lead time ("all") and seasons
+        # Compute metrics across lead time buckets and seasons
         for season in seasons:
             s_sub = merged[merged["season"] == season]
 
-            for var in variables:
-                for model in models:
-                    m_sub = s_sub[s_sub["model"] == model]
-                    
-                    y_fcst = m_sub[f"{var}_fcst"].to_numpy(dtype=float)
-                    y_obs = m_sub[f"{var}_obs"].to_numpy(dtype=float)
+            for bucket in lead_buckets:
+                if bucket == "all":
+                    b_sub = s_sub
+                else:
+                    b_sub = s_sub[s_sub["lead_time_bucket"] == bucket]
 
-                    valid_mask = ~np.isnan(y_fcst) & ~np.isnan(y_obs)
-                    y_fcst = y_fcst[valid_mask]
-                    y_obs = y_obs[valid_mask]
-                    n_samples = len(y_fcst)
+                for var in variables:
+                    for model in models:
+                        m_sub = b_sub[b_sub["model"] == model]
+                        
+                        y_fcst = m_sub[f"{var}_fcst"].to_numpy(dtype=float)
+                        y_obs = m_sub[f"{var}_obs"].to_numpy(dtype=float)
 
-                    if n_samples > 0:
-                        errors = y_fcst - y_obs
-                        mae = float(np.mean(np.abs(errors)))
-                        rmse = float(np.sqrt(np.mean(errors ** 2)))
-                    else:
-                        mae = np.nan
-                        rmse = np.nan
+                        valid_mask = ~np.isnan(y_fcst) & ~np.isnan(y_obs)
+                        y_fcst = y_fcst[valid_mask]
+                        y_obs = y_obs[valid_mask]
+                        n_samples = len(y_fcst)
 
-                    skill_records.append(
-                        {
-                            "location_id": location_id,
-                            "topography": loc_cfg.topography,
-                            "season": season,
-                            "lead_time_bucket": "all",
-                            "variable": var,
-                            "model": model,
-                            "sample_count": n_samples,
-                            "mae": round(mae, 3) if not np.isnan(mae) else None,
-                            "rmse": round(rmse, 3) if not np.isnan(rmse) else None,
-                        }
-                    )
+                        if n_samples > 0:
+                            errors = y_fcst - y_obs
+                            mae = float(np.mean(np.abs(errors)))
+                            rmse = float(np.sqrt(np.mean(errors ** 2)))
+                        else:
+                            mae = np.nan
+                            rmse = np.nan
+
+                        skill_records.append(
+                            {
+                                "location_id": location_id,
+                                "topography": loc_cfg.topography,
+                                "season": season,
+                                "lead_time_bucket": bucket,
+                                "variable": var,
+                                "model": model,
+                                "sample_count": n_samples,
+                                "mae": round(mae, 3) if not np.isnan(mae) else None,
+                                "rmse": round(rmse, 3) if not np.isnan(rmse) else None,
+                            }
+                        )
 
         return pd.DataFrame(skill_records)

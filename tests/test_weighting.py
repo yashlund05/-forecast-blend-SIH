@@ -105,12 +105,35 @@ def test_stored_database_weights_integrity():
     if df.empty:
         pytest.skip("Model weights not yet generated in SQLite.")
 
-    # Group by location, season, variable and check sum == 1.0
-    for (loc, season, var), group in df.groupby(["location_id", "season", "variable"]):
+    # Group by location, season, lead_time_bucket, variable and check sum == 1.0
+    for (loc, season, lead_b, var), group in df.groupby(["location_id", "season", "lead_time_bucket", "variable"]):
         weight_sum = group["weight"].sum()
         assert weight_sum == pytest.approx(1.0, abs=1e-3), (
-            f"Weights do not sum to 1.0 for ({loc}, {season}, {var}): sum={weight_sum}"
+            f"Weights do not sum to 1.0 for ({loc}, {season}, {lead_b}, {var}): sum={weight_sum}"
         )
+
+
+def test_weights_differ_across_lead_time_buckets():
+    """Requirement 4: Assert weights for the same location/season differ across at least two lead-time buckets.
+    
+    Guards against lead-time bucketing silently collapsing to uniform/static values.
+    """
+    db = DatabaseManager()
+    df = db.get_model_weights(location_id="mumbai", season="pre-monsoon", variable="precipitation")
+    if df.empty:
+        pytest.skip("Model weights not yet generated in SQLite.")
+
+    # Compare 0-24h vs 24-72h weights
+    w_0_24 = df[df["lead_time_bucket"] == "0-24h"].set_index("model")["weight"].to_dict()
+    w_24_72 = df[df["lead_time_bucket"] == "24-72h"].set_index("model")["weight"].to_dict()
+
+    assert len(w_0_24) > 0, "No weights found for lead_time_bucket '0-24h'"
+    assert len(w_24_72) > 0, "No weights found for lead_time_bucket '24-72h'"
+
+    # Check that at least one model has a non-zero weight difference across buckets
+    differences = [abs(w_0_24[m] - w_24_72[m]) for m in w_0_24 if m in w_24_72]
+    max_diff = max(differences)
+    assert max_diff > 0.01, f"Weights across lead-time buckets 0-24h and 24-72h must differ, max_diff={max_diff}"
 
 
 def test_weight_explainability_trace():
@@ -118,11 +141,12 @@ def test_weight_explainability_trace():
     from weighting.explainability import WeightExplainabilityEngine
 
     engine = WeightExplainabilityEngine()
-    trace = engine.explain_weights(location_id="mumbai", season="monsoon", variable="precipitation")
+    trace = engine.explain_weights(location_id="mumbai", season="monsoon", variable="precipitation", lead_time_bucket="0-24h")
 
     assert trace.location_id == "mumbai"
     assert trace.station_name == "Mumbai"
     assert trace.topography == "coastal"
+    assert trace.lead_time_bucket == "0-24h"
     assert "SUM" in trace.formula
     assert len(trace.models) > 0
     assert "Maritime boundary layer" in trace.meteorological_rationale
@@ -130,4 +154,5 @@ def test_weight_explainability_trace():
         assert "model" in m
         assert "final_weight" in m
         assert "rmse" in m
+
 
