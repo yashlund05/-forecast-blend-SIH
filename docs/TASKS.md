@@ -31,12 +31,12 @@ move to the next phase with a broken build.
 **Milestone check**: this is your fallback demo if nothing else finishes — must work standalone.
 
 ## Phase 3 — Skill/Weight Engine (Module 2)
-- [ ] Implement per-location, per-season, per-lead-time error computation against historical
+- [x] Implement per-location, per-season, per-lead-time error computation against historical
       archive ground truth
-- [ ] Convert error to inverse-error weights
-- [ ] Assign topography class per location (coastal/arid/hill/plains/deltaic)
-- [ ] Replace Phase 2's equal-weight blend with these computed weights
-- [ ] Build the weight-map visualization on the dashboard map
+- [x] Convert error to inverse-error weights
+- [x] Assign topography class per location (coastal/arid/hill/plains/deltaic)
+- [x] Replace Phase 2's equal-weight blend with these computed weights
+- [x] Build the weight-map visualization on the dashboard map
 
 ## Phase 4 — Verification Module (Module 5) — HIGH PRIORITY, do not skip or rush
 - [ ] Define and hardcode the exact date ranges: training period / weight-calibration period /

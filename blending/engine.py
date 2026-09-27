@@ -78,8 +78,32 @@ class ForecastBlendEngine:
     def __init__(
         self,
         default_weights: Optional[Dict[str, float]] = None,
+        db_manager: Optional[Any] = None,
     ) -> None:
         self.default_weights = default_weights or DEFAULT_MODEL_WEIGHTS
+        self.db = db_manager
+
+    def _lookup_db_weights(
+        self, location_id: str, season: str
+    ) -> Optional[Dict[str, Dict[str, float]]]:
+        """Query learned model weights from database for given location and season."""
+        if self.db is None:
+            from ingestion.db import DatabaseManager
+            self.db = DatabaseManager()
+
+        df = self.db.get_model_weights(location_id=location_id, season=season)
+        if df.empty:
+            # Try overall location weights if season-specific not present
+            df = self.db.get_model_weights(location_id=location_id)
+
+        if df.empty:
+            return None
+
+        learned_weights: Dict[str, Dict[str, float]] = {}
+        for var, group in df.groupby("variable"):
+            learned_weights[str(var)] = dict(zip(group["model"], group["weight"]))
+
+        return learned_weights if learned_weights else None
 
     def blend(
         self,
@@ -96,7 +120,8 @@ class ForecastBlendEngine:
             weights: Optional custom weights. Can be either:
                 - Dict[model_name, float] (applied across all variables)
                 - Dict[variable_name, Dict[model_name, float]] (per-variable weights)
-                If None, uses initialized default weights (equal weighting).
+                If None, automatically queries learned weights from Module 2 (SQLite),
+                falling back to equal weighting if uncalibrated.
             variables: List of variable columns to blend. Defaults to BLEND_VARIABLES.
             
         Returns:
@@ -115,6 +140,16 @@ class ForecastBlendEngine:
         variables = variables or BLEND_VARIABLES
         location_id = str(forecasts_df["location_id"].iloc[0])
         fetch_timestamp = str(forecasts_df["fetch_timestamp"].iloc[0])
+
+        # If weights not explicitly provided, attempt lookup from learned weights table
+        if weights is None:
+            # Determine current season from first target time
+            first_target = str(forecasts_df["target_time"].iloc[0])
+            from weighting.skill import get_season_for_timestamp
+            season = get_season_for_timestamp(first_target)
+            learned_w = self._lookup_db_weights(location_id=location_id, season=season)
+            if learned_w:
+                weights = learned_w
 
         available_models = sorted(list(forecasts_df["model"].unique()))
         missing_models = [m for m in BLEND_MODELS if m not in available_models]

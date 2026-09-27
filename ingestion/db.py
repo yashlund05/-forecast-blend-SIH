@@ -156,6 +156,55 @@ class DatabaseManager:
                 """
             )
 
+            # Historical model forecasts for backtesting and skill evaluation
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS historical_forecasts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    location_id TEXT NOT NULL,
+                    target_time TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    temperature_2m REAL,
+                    precipitation REAL,
+                    wind_speed_10m REAL,
+                    UNIQUE(location_id, target_time, model) ON CONFLICT REPLACE
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_hist_fcst_lookup
+                ON historical_forecasts (location_id, target_time, model)
+                """
+            )
+
+            # Model weights lookup table (Module 2 output)
+            cursor.execute(
+                """
+                CREATE TABLE IF NOT EXISTS model_weights (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    location_id TEXT NOT NULL,
+                    season TEXT NOT NULL,
+                    lead_time_bucket TEXT NOT NULL,
+                    variable TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    weight REAL NOT NULL,
+                    sample_count INTEGER NOT NULL,
+                    rmse REAL,
+                    mae REAL,
+                    low_confidence INTEGER NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(location_id, season, lead_time_bucket, variable, model) ON CONFLICT REPLACE
+                )
+                """
+            )
+            cursor.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_model_weights_lookup
+                ON model_weights (location_id, season, lead_time_bucket, variable)
+                """
+            )
+
     def save_raw_payload(
         self,
         fetch_timestamp: str,
@@ -345,3 +394,108 @@ class DatabaseManager:
         with self.get_connection() as conn:
             query = "SELECT * FROM pipeline_runs ORDER BY id DESC LIMIT ?"
             return pd.read_sql_query(query, conn, params=(limit,))
+
+    def save_historical_forecasts(self, df_or_records: Any) -> int:
+        """Insert or replace historical model forecast runs."""
+        if isinstance(df_or_records, pd.DataFrame):
+            if df_or_records.empty:
+                return 0
+            records = df_or_records.to_dict(orient="records")
+        else:
+            records = df_or_records
+
+        if not records:
+            return 0
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.executemany(
+                """
+                INSERT INTO historical_forecasts (
+                    location_id, target_time, model, temperature_2m, precipitation, wind_speed_10m
+                ) VALUES (
+                    :location_id, :target_time, :model, :temperature_2m, :precipitation, :wind_speed_10m
+                )
+                """,
+                records,
+            )
+            return len(records)
+
+    def get_historical_forecasts(
+        self,
+        location_id: str,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None,
+        models: Optional[List[str]] = None,
+    ) -> pd.DataFrame:
+        """Retrieve historical model forecasts for a location."""
+        with self.get_connection() as conn:
+            query = "SELECT * FROM historical_forecasts WHERE location_id = ?"
+            params: List[Any] = [location_id]
+            if start_date:
+                query += " AND target_time >= ?"
+                params.append(start_date)
+            if end_date:
+                query += " AND target_time <= ?"
+                params.append(end_date)
+            if models:
+                placeholders = ",".join(["?"] * len(models))
+                query += f" AND model IN ({placeholders})"
+                params.extend(models)
+            query += " ORDER BY target_time, model"
+            return pd.read_sql_query(query, conn, params=params)
+
+    def save_model_weights(self, df_or_records: Any) -> int:
+        """Insert or replace computed model weights."""
+        if isinstance(df_or_records, pd.DataFrame):
+            if df_or_records.empty:
+                return 0
+            records = df_or_records.to_dict(orient="records")
+        else:
+            records = df_or_records
+
+        if not records:
+            return 0
+
+        with self.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.executemany(
+                """
+                INSERT INTO model_weights (
+                    location_id, season, lead_time_bucket, variable,
+                    model, weight, sample_count, rmse, mae, low_confidence, updated_at
+                ) VALUES (
+                    :location_id, :season, :lead_time_bucket, :variable,
+                    :model, :weight, :sample_count, :rmse, :mae, :low_confidence, :updated_at
+                )
+                """,
+                records,
+            )
+            return len(records)
+
+    def get_model_weights(
+        self,
+        location_id: Optional[str] = None,
+        season: Optional[str] = None,
+        lead_time_bucket: Optional[str] = None,
+        variable: Optional[str] = None,
+    ) -> pd.DataFrame:
+        """Query computed model weights from SQLite."""
+        with self.get_connection() as conn:
+            query = "SELECT * FROM model_weights WHERE 1=1"
+            params: List[Any] = []
+            if location_id:
+                query += " AND location_id = ?"
+                params.append(location_id)
+            if season:
+                query += " AND season = ?"
+                params.append(season)
+            if lead_time_bucket:
+                query += " AND lead_time_bucket = ?"
+                params.append(lead_time_bucket)
+            if variable:
+                query += " AND variable = ?"
+                params.append(variable)
+            query += " ORDER BY location_id, season, variable, model"
+            return pd.read_sql_query(query, conn, params=params)
+

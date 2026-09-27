@@ -81,7 +81,7 @@ def test_blend_engine_renormalizes_on_partial_models():
         ]
     )
 
-    result = engine.blend(sample_df)
+    result = engine.blend(sample_df, weights=DEFAULT_MODEL_WEIGHTS)
 
     assert not result.blended_df.empty
     assert set(result.missing_models) == {"ecmwf_aifs", "ecmwf_ifs"}
