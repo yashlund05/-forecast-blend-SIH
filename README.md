@@ -22,6 +22,23 @@ The system implements all six core architectural modules and two key differentia
 ### Key Differentiators
 - **Real Live Data, Zero Fabrication**: Forecasts and reanalysis benchmarks are retrieved live from Open-Meteo APIs. No skill scores, case studies, or verification numbers are hardcoded or simulated.
 - **Strict Leak-Free Time-Split & Honest Limitation Reporting**: Training (`2021-09-01` to `2024-04-30`) and test (`2024-07-01` to `2024-08-31`) windows are strictly non-overlapping. The verification dashboard reports all edge cases where individual physical models outperformed the blend rather than filtering them out.
+- **Evidence-Backed, Qualified Claim**: Blending demonstrably helps for precipitation (**+7.81% vs. naive**, RMSE 1.076 mm vs. 1.167 mm) and wind speed (**+6.81% vs. naive**, **+9.16% vs. ECMWF IFS**, RMSE 2.728 km/h vs. 3.002 km/h, $p < 0.05$); for temperature, results favor using ECMWF IFS directly (IFS achieves **0.794 °C** vs. blend **0.833 °C**; 90% CI on difference excludes zero), as IFS's 4D-Var data assimilation leaves virtually no headroom for linear weight combinations with lower-resolution models.
+
+---
+
+## Empirical Verification Results (Held-Out Monsoon Test Split)
+
+Evaluated across **43,920 point-predictions** (14,640 per variable across 10 national stations) during the reserved test period (`2024-07-01` to `2024-08-31`):
+
+| Variable | NOAA GFS | DWD ICON | ECMWF IFS | Naive Blend | Learned Blend | Blend vs. Naive | Verdict vs. Best Single Model |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
+| **Temperature (2m)** | 2.129 °C | 1.520 °C | **0.794 °C** | 1.212 °C | 0.833 °C | **+31.22%** | **IFS alone statistically outperforms blend** (by 0.041 °C, $p < 0.05$) |
+| **Precipitation** | 1.655 mm | 1.530 mm | 1.104 mm | 1.167 mm | **1.076 mm** | **+7.81%** | **+2.26% vs. IFS** (90% CI crosses zero — comparable) |
+| **Wind Speed (10m)** | 4.735 km/h | 5.372 km/h | 3.002 km/h | 2.928 km/h | **2.728 km/h** | **+6.81%** | **Blend statistically beats best single model** (+9.16% vs. IFS, $p < 0.05$) |
+
+- **Normalized Multi-Variate Skill Score**: **+15.28%** (unitless arithmetic mean of relative error reductions vs. naive averaging; macro sample-weighted reduction is **+14.13%**).
+- **No Unit-Mixed RMSE**: Averaging RMSE across heterogeneous units (°C, mm, km/h) is mathematically invalid and has been removed from all reports in favor of normalized skill scoring and per-variable evaluation.
+- For complete 1,000-resample bootstrap confidence intervals, full 16-case failure logs, and IMD SOP citations, see [VERIFICATION_REPORT.md](VERIFICATION_REPORT.md).
 
 ---
 

@@ -357,6 +357,30 @@ class VerificationEngine:
         df_results = pd.DataFrame(location_results)
 
         # Headline aggregate calculations
+        # Per-variable breakdown (statistically valid — avoids mixing °C, mm, km/h)
+        var_summaries: Dict[str, Dict[str, float]] = {}
+        for v in variables:
+            v_df = df_results[df_results["variable"] == v] if not df_results.empty else pd.DataFrame()
+            if not v_df.empty:
+                var_summaries[v] = {
+                    "rmse_blend": round(float(v_df["rmse_blend"].mean()), 3),
+                    "rmse_naive": round(float(v_df["rmse_naive"].mean()), 3),
+                    "rmse_ifs": round(float(v_df["rmse_ifs"].mean()), 3),
+                    "rmse_best_model": round(float(v_df["rmse_best_model"].mean()), 3),
+                    "pct_imp_vs_naive": round(float(v_df["pct_imp_vs_naive"].mean()), 2),
+                    "pct_imp_vs_best": round(float(v_df["pct_imp_vs_best"].mean()), 2),
+                }
+            else:
+                var_summaries[v] = {
+                    "rmse_blend": 0.0,
+                    "rmse_naive": 0.0,
+                    "rmse_ifs": 0.0,
+                    "rmse_best_model": 0.0,
+                    "pct_imp_vs_naive": 0.0,
+                    "pct_imp_vs_best": 0.0,
+                }
+
+        # Legacy aggregate calculations
         if not df_results.empty:
             mean_rmse_blend = float(df_results["rmse_blend"].mean())
             mean_rmse_naive = float(df_results["rmse_naive"].mean())
@@ -367,17 +391,25 @@ class VerificationEngine:
             mean_rmse_blend = mean_rmse_naive = mean_rmse_best = 0.0
             mean_imp_vs_naive = mean_imp_vs_best = 0.0
 
+        # Normalized multi-variate skill score: mean relative error reduction vs naive across variables
+        normalized_skill_score = float(np.mean([var_summaries[v]["pct_imp_vs_naive"] for v in variables])) if var_summaries else 0.0
+
+
         return {
             "period": f"{start_date} to {end_date} (HELD-OUT TEST SPLIT)",
             "summary": {
+                # Legacy unweighted macro averages (retained for backward compatibility; do not present as valid unit-mixed RMSE)
                 "mean_rmse_blend": round(mean_rmse_blend, 3),
                 "mean_rmse_naive": round(mean_rmse_naive, 3),
                 "mean_rmse_best_model": round(mean_rmse_best, 3),
                 "mean_imp_vs_naive_pct": round(mean_imp_vs_naive, 2),
                 "mean_imp_vs_best_pct": round(mean_imp_vs_best, 2),
+                "normalized_skill_score_pct": round(normalized_skill_score, 2),
+                "var_summaries": var_summaries,
                 "total_stations_evaluated": df_results["location_id"].nunique() if not df_results.empty else 0,
                 "total_eval_points": int(df_results["n_samples"].sum()) if not df_results.empty else 0,
             },
             "metrics_table": df_results,
             "failure_cases": underperforming_cases,
         }
+

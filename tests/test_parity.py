@@ -33,12 +33,13 @@ def test_dashboard_offline_verification_parity():
 
     assert off_summary.keys() == dash_summary.keys(), "Summary keys mismatch between offline and dashboard"
 
-    for key in ["mean_rmse_blend", "mean_rmse_naive", "mean_rmse_best_model", "mean_imp_vs_naive_pct", "mean_imp_vs_best_pct"]:
+    for key in ["mean_rmse_blend", "mean_rmse_naive", "mean_rmse_best_model", "mean_imp_vs_naive_pct", "mean_imp_vs_best_pct", "normalized_skill_score_pct"]:
         off_val = off_summary[key]
         dash_val = dash_summary[key]
         assert off_val == pytest.approx(dash_val, rel=1e-6), (
             f"Parity mismatch for '{key}': offline={off_val} vs dashboard={dash_val}"
         )
+
 
     assert off_summary["total_eval_points"] == dash_summary["total_eval_points"]
     assert off_summary["total_stations_evaluated"] == dash_summary["total_stations_evaluated"]
