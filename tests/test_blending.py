@@ -164,3 +164,20 @@ def test_pluggable_weights_interface():
     row = result.blended_df.iloc[0]
     expected_temp = 0.9 * 35.0 + 0.1 * 25.0  # 34.0
     assert row["temperature_2m_blend"] == pytest.approx(expected_temp)
+
+
+def test_regime_gated_gbdt_evaluation():
+    """Verify that RegimeGatedBlendEngine executes leak-free training and held-out test evaluation."""
+    from blending.ml_gating import RegimeGatedBlendEngine
+
+    engine = RegimeGatedBlendEngine()
+    eval_res = engine.train_and_evaluate(variable="temperature_2m")
+
+    assert eval_res.variable == "temperature_2m"
+    assert eval_res.n_train_samples > 1000
+    assert eval_res.n_test_samples > 500
+    # GBDT ML gating should achieve competitive or lower RMSE than individual raw NWP models
+    assert eval_res.rmse_ml_gated < eval_res.rmse_gfs
+    assert eval_res.rmse_ml_gated < eval_res.rmse_icon
+    assert eval_res.pct_imp_vs_naive > 0
+

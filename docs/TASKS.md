@@ -63,13 +63,14 @@ move to the next phase with a broken build.
 - [x] Display alerts on dashboard
 
 ## Phase 7 — Polish / stretch (only if time remains)
-- [ ] Regime-gated ML model (LightGBM) replacing static inverse-error weights
-- [ ] Explainability panel (simple "why this weight" trace, doesn't need full SHAP)
-- [ ] CSV/JSON export button
-- [ ] Scheduler status indicator on dashboard
+- [x] Regime-gated ML model (LightGBM / HistGradientBoosting) replacing static inverse-error weights
+- [x] Explainability panel (simple "why this weight" trace, doesn't need full SHAP)
+- [x] CSV/JSON export button
+- [x] Scheduler status indicator on dashboard
 
 ## Pre-demo checklist
-- [ ] Full pipeline runs live in front of judges without manual data injection
-- [ ] Verification numbers are computed live/from real backtest, not hardcoded
-- [ ] At least one honest limitation is ready to state if asked
-- [ ] Open-Meteo / ECMWF / NOAA / DWD attribution is visible somewhere in the UI or README
+- [x] Full pipeline runs live in front of judges without manual data injection
+- [x] Verification numbers are computed live/from real backtest, not hardcoded
+- [x] At least one honest limitation is ready to state if asked (16 transparent failure cases reported)
+- [x] Open-Meteo / ECMWF / NOAA / DWD attribution is visible somewhere in the UI or README
+

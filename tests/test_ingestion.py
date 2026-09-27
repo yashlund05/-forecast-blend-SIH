@@ -225,3 +225,25 @@ def test_graceful_degradation_on_failed_source(temp_db):
         ).fetchall()
         assert len(failures) == 1
         assert "503" in failures[0]["error_message"]
+
+
+def test_ingestion_scheduler_calculation(temp_db):
+    """Verify operational scheduler correctly calculates next synoptic run and status."""
+    from datetime import datetime, timezone
+    from ingestion.scheduler import IngestionScheduler
+
+    scheduler = IngestionScheduler(db_manager=temp_db)
+    
+    # Test specific fixed UTC time (e.g. 02:00 UTC -> next cycle dissemination is 00:00 + 3.5h = 03:30 UTC)
+    ref_time = datetime(2026, 9, 28, 2, 0, tzinfo=timezone.utc)
+    next_run = scheduler.get_next_scheduled_run(now=ref_time)
+    assert next_run.hour == 3
+    assert next_run.minute == 30
+
+    # Test status payload
+    status = scheduler.get_status()
+    assert status["status"] == "ACTIVE_CRON"
+    assert status["cycle_interval_hours"] == 6
+    assert "next_run_iso" in status
+    assert "countdown_str" in status
+

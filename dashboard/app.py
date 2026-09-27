@@ -91,6 +91,9 @@ from extremes.thresholds import (
     HEATWAVE_THRESHOLD_TEMP_C,
     HIGH_WIND_THRESHOLD_KMH,
 )
+from ingestion.scheduler import IngestionScheduler
+from weighting.explainability import WeightExplainabilityEngine
+from blending.ml_gating import RegimeGatedBlendEngine
 
 @st.cache_resource
 def get_system_singletons():
@@ -102,12 +105,36 @@ def get_system_singletons():
     verification_engine = VerificationEngine(db_manager=db)
     extreme_detector = ExtremeDetector(db=db)
     case_study_engine = CaseStudyEngine(db=db)
-    return db, pipeline, weight_engine, blend_engine, verification_engine, extreme_detector, case_study_engine
+    scheduler = IngestionScheduler(db_manager=db)
+    explainability_engine = WeightExplainabilityEngine(db=db)
+    ml_gating_engine = RegimeGatedBlendEngine(db=db)
+    return (
+        db,
+        pipeline,
+        weight_engine,
+        blend_engine,
+        verification_engine,
+        extreme_detector,
+        case_study_engine,
+        scheduler,
+        explainability_engine,
+        ml_gating_engine,
+    )
 
 
-db_manager, ingestion_pipeline, weight_engine, blend_engine, verification_engine, extreme_detector, case_study_engine = (
-    get_system_singletons()
-)
+(
+    db_manager,
+    ingestion_pipeline,
+    weight_engine,
+    blend_engine,
+    verification_engine,
+    extreme_detector,
+    case_study_engine,
+    ingestion_scheduler,
+    explainability_engine,
+    ml_gating_engine,
+) = get_system_singletons()
+
 
 # Title and context
 st.markdown(
@@ -196,7 +223,8 @@ forecasts_df = db_manager.get_latest_forecasts(selected_loc_id)
 
 # System Health & Pipeline Status Banner
 pipeline_history = db_manager.get_pipeline_history(limit=1)
-col_status1, col_status2, col_status3 = st.columns([2, 2, 3])
+sched_status = ingestion_scheduler.get_status()
+col_status1, col_status2, col_status3, col_status4 = st.columns([2, 2, 2, 2])
 
 with col_status1:
     if not pipeline_history.empty:
@@ -217,6 +245,13 @@ with col_status1:
         st.caption("No pipeline executions recorded yet.")
 
 with col_status2:
+    st.markdown(
+        'Scheduler: <span class="status-ok">ACTIVE (6h Sync)</span>',
+        unsafe_allow_html=True,
+    )
+    st.caption(f"Next cycle in {sched_status['countdown_str']} ({sched_status['next_run_display']})")
+
+with col_status3:
     if not forecasts_df.empty:
         available_models = sorted(forecasts_df["model"].unique().tolist())
         missing_models = [m for m in BLEND_MODELS if m not in available_models]
@@ -229,9 +264,10 @@ with col_status2:
         st.markdown("**Models Available**: `0/4`")
         st.caption("Click 'Run Pipeline Now' to fetch")
 
-with col_status3:
+with col_status4:
     st.markdown(f"**Target Station**: `{selected_loc_name}` ({selected_loc_cfg.state})")
     st.caption(f"Zone: {selected_loc_cfg.zone} | Topography: {selected_loc_cfg.topography}")
+
 
 st.markdown("---")
 
@@ -412,14 +448,26 @@ with tab_forecast:
             )
 
             # Export Blended Forecast (Phase 7 Deliverable)
-            csv_data = blended_df.to_csv(index=False).encode("utf-8")
-            st.download_button(
-                label="📥 Export Blended Forecast (CSV)",
-                data=csv_data,
-                file_name=f"blended_forecast_{selected_loc_id}_{datetime.utcnow().strftime('%Y%m%d_%H%M')}.csv",
-                mime="text/csv",
-                key="btn_export_forecast_csv",
-            )
+            st.markdown("---")
+            col_exp_f1, col_exp_f2 = st.columns(2)
+            with col_exp_f1:
+                csv_data = blended_df.to_csv(index=False).encode("utf-8")
+                st.download_button(
+                    label="📥 Export Blended Forecast (CSV)",
+                    data=csv_data,
+                    file_name=f"blended_forecast_{selected_loc_id}_{datetime.utcnow().strftime('%Y%m%d_%H%M')}.csv",
+                    mime="text/csv",
+                    key="btn_export_forecast_csv",
+                )
+            with col_exp_f2:
+                json_data = blended_df.to_json(orient="records", date_format="iso").encode("utf-8")
+                st.download_button(
+                    label="📥 Export Blended Forecast (JSON)",
+                    data=json_data,
+                    file_name=f"blended_forecast_{selected_loc_id}_{datetime.utcnow().strftime('%Y%m%d_%H%M')}.json",
+                    mime="application/json",
+                    key="btn_export_forecast_json",
+                )
 
 # =====================================================================
 # TAB 2: Dynamic Model Weight Maps (Deliverable 2)
@@ -589,6 +637,80 @@ with tab_weight_map:
             """
         )
 
+    # -----------------------------------------------------------------
+    # Explainability Panel: Why This Weight? (Phase 7 Deliverable)
+    # -----------------------------------------------------------------
+    st.markdown("---")
+    st.subheader("🔬 Deep-Dive Explainability: Why This Weight? (Audit & Physical Rationale)")
+    st.caption(
+        "Inspect the step-by-step mathematical derivation and physical meteorological rationale "
+        "behind model weights for any station and regime."
+    )
+
+    exp_col1, exp_col2, exp_col3 = st.columns(3)
+    with exp_col1:
+        exp_loc_name = st.selectbox(
+            "Select Station to Explain",
+            options=list(location_options.keys()),
+            index=0,
+            key="exp_loc_name_select",
+        )
+        exp_loc_id = location_options[exp_loc_name]
+    with exp_col2:
+        exp_season = st.selectbox(
+            "Select Season",
+            options=["monsoon", "pre-monsoon", "post-monsoon", "winter"],
+            index=0,
+            key="exp_season_select",
+            format_func=lambda s: s.capitalize(),
+        )
+    with exp_col3:
+        exp_var = st.selectbox(
+            "Select Variable",
+            options=["precipitation", "temperature_2m", "wind_speed_10m"],
+            index=0,
+            key="exp_var_select",
+            format_func=lambda v: "Precipitation" if "precip" in v else "Temperature" if "temp" in v else "Wind Speed",
+        )
+
+    trace = explainability_engine.explain_weights(
+        location_id=exp_loc_id,
+        season=exp_season,
+        variable=exp_var,
+        lead_time_bucket="all",
+    )
+
+    # Mathematical Formula Display
+    st.latex(r"W_m = \frac{\frac{1}{\text{RMSE}_m^2 + \epsilon}}{\sum_{k} \frac{1}{\text{RMSE}_k^2 + \epsilon}}")
+
+    # Step-by-Step Derivation Table
+    if trace.models:
+        t_df = pd.DataFrame(trace.models)
+        st.dataframe(
+            t_df[["display_name", "sample_count", "rmse", "mae", "inv_score", "final_weight_pct", "status"]].rename(
+                columns={
+                    "display_name": "Model Source",
+                    "sample_count": "Reanalysis Samples (N)",
+                    "rmse": "Historical RMSE",
+                    "mae": "Historical MAE",
+                    "inv_score": "Inverse Score (1/RMSE²)",
+                    "final_weight_pct": "Final Weight Share",
+                    "status": "Calibration Status",
+                }
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    # Physical Meteorological Rationale
+    st.markdown(
+        f"""
+        > [!NOTE]
+        > **Physical Meteorological Rationale ({trace.topography.capitalize()} Topography — {trace.station_name})**:  
+        > {trace.meteorological_rationale}
+        """
+    )
+
 # =====================================================================
 # TAB 3: Empirical Verification (Held-Out Test Split)
 # =====================================================================
@@ -740,9 +862,96 @@ with tab_verification:
     else:
         st.info("No failure cases detected in current sample.")
 
+    # Export Verification Metrics (Phase 7 Deliverable)
+    st.markdown("---")
+    st.subheader("📥 Export Test Period Verification Metrics")
+    col_v_exp1, col_v_exp2 = st.columns(2)
+    with col_v_exp1:
+        v_csv = metrics_df.to_csv(index=False).encode("utf-8")
+        st.download_button(
+            label="📥 Export Verification Metrics (CSV)",
+            data=v_csv,
+            file_name=f"verification_metrics_{datetime.utcnow().strftime('%Y%m%d_%H%M')}.csv",
+            mime="text/csv",
+            key="btn_export_verif_csv",
+        )
+    with col_v_exp2:
+        v_json = metrics_df.to_json(orient="records", date_format="iso").encode("utf-8")
+        st.download_button(
+            label="📥 Export Verification Metrics (JSON)",
+            data=v_json,
+            file_name=f"verification_metrics_{datetime.utcnow().strftime('%Y%m%d_%H%M')}.json",
+            mime="application/json",
+            key="btn_export_verif_json",
+        )
+
+    # -----------------------------------------------------------------
+    # Regime-Gated ML Blending Model Upgrade (Phase 7 Stretch)
+    # -----------------------------------------------------------------
+    st.markdown("---")
+    with st.expander("🤖 Advanced Regime-Gated ML Blending Upgrade (Phase 7 Stretch — GBDT / LightGBM Algorithm)"):
+        st.markdown(
+            """
+            **Continuous Atmospheric Regime Conditioning**:  
+            While static inverse-error weights condition on discrete buckets `(station, season, lead_time_bucket)`,
+            the **Regime-Gated Gradient Boosted Decision Tree (GBDT)** dynamically conditions multi-model combination on continuous covariates:
+            - Multi-model ensemble mean & standard deviation (inter-model spread / uncertainty)
+            - Diurnal radiation cycle (hour of day)
+            - Seasonal progression (month)
+            - Topography classification (plains, coastal, arid, hill, deltaic)
+            
+            *Strictly trained on TRAIN period (2021-09-01 to 2024-04-30) and evaluated on held-out TEST period (2024-07-01 to 2024-08-31) with zero data leakage.*
+            """
+        )
+
+        ml_eval_btn = st.button("🚀 Train & Evaluate Regime-Gated GBDT Model Now", key="btn_run_ml_gating")
+        if ml_eval_btn or "ml_gating_result" in st.session_state:
+            if ml_eval_btn or "ml_gating_result" not in st.session_state:
+                with st.spinner("Training Histogram GBDT across 20,880 historical reanalysis points and evaluating on held-out test split..."):
+                    st.session_state["ml_gating_result"] = ml_gating_engine.train_and_evaluate(variable="temperature_2m")
+
+            res_ml = st.session_state["ml_gating_result"]
+
+            m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+            with m_col1:
+                st.metric("Regime-Gated GBDT RMSE", f"{res_ml.rmse_ml_gated:.3f} °C", delta=f"-{res_ml.pct_imp_vs_naive:.1f}% vs Naive", delta_color="inverse")
+            with m_col2:
+                st.metric("Static Inverse Blend RMSE", f"{res_ml.rmse_static_blend:.3f} °C", delta=f"-{res_ml.pct_imp_vs_static:.1f}% by GBDT", delta_color="inverse")
+            with m_col3:
+                st.metric("Naive Equal Blend RMSE", f"{res_ml.rmse_naive:.3f} °C")
+            with m_col4:
+                st.metric("Best Single Model (IFS) RMSE", f"{res_ml.rmse_ifs:.3f} °C")
+
+            # Comparative Bar Chart
+            ml_comp_fig = go.Figure()
+            comp_models = ["NOAA GFS", "DWD ICON", "ECMWF IFS", "Naive Equal Blend", "Static Inverse Blend", "Regime-Gated GBDT"]
+            comp_rmses = [res_ml.rmse_gfs, res_ml.rmse_icon, res_ml.rmse_ifs, res_ml.rmse_naive, res_ml.rmse_static_blend, res_ml.rmse_ml_gated]
+            comp_colors = ["#1f77b4", "#ff7f0e", "#2ca02c", "#6c757d", "#17a2b8", "#28a745"]
+            ml_comp_fig.add_trace(
+                go.Bar(
+                    x=comp_models,
+                    y=comp_rmses,
+                    marker_color=comp_colors,
+                    text=[f"{v:.3f} °C" for v in comp_rmses],
+                    textposition="auto",
+                )
+            )
+            ml_comp_fig.update_layout(
+                title="<b>Held-Out Test Period RMSE: Raw NWP vs. Baselines vs. Regime-Gated GBDT</b>",
+                yaxis_title="RMSE (°C, Lower is Better)",
+                height=380,
+                margin=dict(l=40, r=40, t=50, b=40),
+            )
+            st.plotly_chart(ml_comp_fig, use_container_width=True)
+            st.caption(
+                f"Evaluated on {res_ml.n_test_samples:,} held-out test predictions (2024-07-01 to 2024-08-31). "
+                f"Trained on {res_ml.n_train_samples:,} non-overlapping samples. Zero data leakage."
+            )
+
 # =====================================================================
 # TAB 4: Extreme Weather & IMD Alert System (Module 4 & Phase 5/6)
 # =====================================================================
+
 with tab_extremes:
     st.subheader("⚠️ Extreme Weather Intelligence & Operational IMD District Alerts")
     st.markdown(

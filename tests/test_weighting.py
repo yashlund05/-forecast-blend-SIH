@@ -111,3 +111,23 @@ def test_stored_database_weights_integrity():
         assert weight_sum == pytest.approx(1.0, abs=1e-3), (
             f"Weights do not sum to 1.0 for ({loc}, {season}, {var}): sum={weight_sum}"
         )
+
+
+def test_weight_explainability_trace():
+    """Verify that WeightExplainabilityEngine produces complete mathematical trace and physical rationale."""
+    from weighting.explainability import WeightExplainabilityEngine
+
+    engine = WeightExplainabilityEngine()
+    trace = engine.explain_weights(location_id="mumbai", season="monsoon", variable="precipitation")
+
+    assert trace.location_id == "mumbai"
+    assert trace.station_name == "Mumbai"
+    assert trace.topography == "coastal"
+    assert "SUM" in trace.formula
+    assert len(trace.models) > 0
+    assert "Maritime boundary layer" in trace.meteorological_rationale
+    for m in trace.models:
+        assert "model" in m
+        assert "final_weight" in m
+        assert "rmse" in m
+
