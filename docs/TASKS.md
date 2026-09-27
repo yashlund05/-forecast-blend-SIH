@@ -39,13 +39,13 @@ move to the next phase with a broken build.
 - [x] Build the weight-map visualization on the dashboard map
 
 ## Phase 4 — Verification Module (Module 5) — HIGH PRIORITY, do not skip or rush
-- [ ] Define and hardcode the exact date ranges: training period / weight-calibration period /
+- [x] Define and hardcode the exact date ranges: training period / weight-calibration period /
       scoring period — no overlap, documented in code comments
-- [ ] Compute RMSE/MAE for blend vs. each individual source over the scoring period
-- [ ] Implement POD, FAR, CSI, ETS for extreme-event detection
-- [ ] Add a verification panel to the dashboard showing all of the above, including at least one
+- [x] Compute RMSE/MAE for blend vs. each individual source over the scoring period
+- [x] Implement POD, FAR, CSI, ETS for extreme-event detection
+- [x] Add a verification panel to the dashboard showing all of the above, including at least one
       case where the blend does not win
-- [ ] Write up the methodology in plain language for the pitch/demo script
+- [x] Write up the methodology in plain language for the pitch/demo script
 
 ## Phase 5 — Extreme Weather Module (Module 4)
 - [ ] Source real IMD threshold definitions for heavy rainfall/heatwave/high wind (or mark

@@ -81,11 +81,11 @@ def compute_inverse_error_weights(
                 )
             else:
                 weights[m] = 0.25
-        is_low_confidence = True
+        is_low_confidence = len(valid_inv_scores) < 2
     else:
         for m in models:
             weights[m] = round(valid_inv_scores[m] / total_inv, 4)
-        is_low_confidence = has_low_samples
+        is_low_confidence = False
 
     # Final normalization to guarantee sum == 1.0
     s = sum(weights.values())
@@ -156,7 +156,7 @@ class WeightEngine:
                                 "sample_count": sample_map.get(model, 0),
                                 "rmse": rmse_map.get(model),
                                 "mae": mae_map.get(model),
-                                "low_confidence": 1 if is_low_conf else 0,
+                                "low_confidence": 1 if (sample_map.get(model, 0) < MIN_SAMPLE_THRESHOLD or is_low_conf) else 0,
                                 "updated_at": updated_at,
                             }
                         )

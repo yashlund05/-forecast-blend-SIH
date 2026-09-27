@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 # Hard Rule 4: Strictly Non-Overlapping Time Splits
 # Leaked date ranges invalidate verification credibility.
 # =====================================================================
-TRAIN_START = "2023-09-01"
+TRAIN_START = "2021-09-01"
 TRAIN_END = "2024-04-30"
 
 CALIBRATE_START = "2024-05-01"
