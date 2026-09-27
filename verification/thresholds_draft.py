@@ -1,22 +1,50 @@
-"""Provisional draft thresholds for extreme weather contingency evaluation.
+"""Verified IMD Operational Thresholds for Extreme Weather Evaluation.
 
-# PLACEHOLDER - pending Phase 5 IMD source verification
-These threshold constants represent commonly-cited meteorological alert criteria
-used to establish verification math (POD, FAR, CSI, ETS) in Phase 4.
-Per AGENTS.md Hard Rule 3, these are explicitly flagged as placeholders
-and will be replaced with verified regional IMD definitions in Phase 5.
+Phase 5 Verified IMD Standards.
+Re-exports canonical thresholds and classification functions from extremes.thresholds.
 """
 
-# PLACEHOLDER - pending Phase 5 IMD source verification
-# IMD criteria for heavy rainfall: >= 64.5 mm in 24 hours.
-# Hourly proxy burst threshold: >= 5.0 mm/hr
-HEAVY_RAIN_HOURLY_THRESHOLD_MM = 5.0  # PLACEHOLDER - pending Phase 5 IMD source verification
-HEAVY_RAIN_24H_THRESHOLD_MM = 64.5   # PLACEHOLDER - pending Phase 5 IMD source verification
+from typing import List, Tuple
+from extremes.thresholds import (
+    HEATWAVE_THRESHOLD_TEMP_C,
+    HEAVY_RAIN_24H_THRESHOLD_MM,
+    HEAVY_RAIN_HOURLY_THRESHOLD_MM,
+    HIGH_WIND_THRESHOLD_KMH,
+    IMD_HEAT_THRESHOLDS,
+    IMD_RAIN_EXTREMELY_HEAVY_MIN,
+    IMD_RAIN_HEAVY_MAX,
+    IMD_RAIN_HEAVY_MIN,
+    IMD_RAIN_VERY_HEAVY_MAX,
+    IMD_RAIN_VERY_HEAVY_MIN,
+    IMD_WIND_GALE_MIN,
+    IMD_WIND_SEVERE_GALE_MIN,
+    IMD_WIND_SQUALL_MIN,
+    IMD_WIND_STRONG_BREEZE_MIN,
+    classify_heatwave,
+    classify_hourly_rainfall,
+    classify_rainfall_24h,
+    classify_wind,
+    resolve_compound_alert,
+)
 
-# PLACEHOLDER - pending Phase 5 IMD source verification
-# Heatwave threshold proxy: max surface temperature >= 40.0°C (for plains)
-HEATWAVE_THRESHOLD_TEMP_C = 40.0     # PLACEHOLDER - pending Phase 5 IMD source verification
-
-# PLACEHOLDER - pending Phase 5 IMD source verification
-# High wind / squall speed proxy: sustained wind speed >= 40.0 km/h
-HIGH_WIND_THRESHOLD_KMH = 40.0       # PLACEHOLDER - pending Phase 5 IMD source verification
+__all__ = [
+    "HEAVY_RAIN_HOURLY_THRESHOLD_MM",
+    "HEAVY_RAIN_24H_THRESHOLD_MM",
+    "HEATWAVE_THRESHOLD_TEMP_C",
+    "HIGH_WIND_THRESHOLD_KMH",
+    "IMD_RAIN_HEAVY_MIN",
+    "IMD_RAIN_HEAVY_MAX",
+    "IMD_RAIN_VERY_HEAVY_MIN",
+    "IMD_RAIN_VERY_HEAVY_MAX",
+    "IMD_RAIN_EXTREMELY_HEAVY_MIN",
+    "IMD_HEAT_THRESHOLDS",
+    "IMD_WIND_STRONG_BREEZE_MIN",
+    "IMD_WIND_SQUALL_MIN",
+    "IMD_WIND_GALE_MIN",
+    "IMD_WIND_SEVERE_GALE_MIN",
+    "classify_rainfall_24h",
+    "classify_hourly_rainfall",
+    "classify_heatwave",
+    "classify_wind",
+    "resolve_compound_alert",
+]

@@ -48,19 +48,19 @@ move to the next phase with a broken build.
 - [x] Write up the methodology in plain language for the pitch/demo script
 
 ## Phase 5 — Extreme Weather Module (Module 4)
-- [ ] Source real IMD threshold definitions for heavy rainfall/heatwave/high wind (or mark
+- [x] Source real IMD threshold definitions for heavy rainfall/heatwave/high wind (or mark
       placeholders clearly if not yet verified)
-- [ ] Apply thresholds to blended forecast, flag/score events
-- [ ] Identify one real historical extreme event in the archive window
-- [ ] Build the case-study comparison: naive average vs. blend vs. actual observed value, with
+- [x] Apply thresholds to blended forecast, flag/score events
+- [x] Identify one real historical extreme event in the archive window
+- [x] Build the case-study comparison: naive average vs. blend vs. actual observed value, with
       numbers
-- [ ] Add extreme alert panel to dashboard
+- [x] Add extreme alert panel to dashboard
 
 ## Phase 6 — District alerts (differentiator)
-- [ ] Pick 2+ locations/climate zones for alert generation
-- [ ] Build templated alert strings (English + at least 1 regional language)
-- [ ] Wire alert generation to the extreme module's output
-- [ ] Display alerts on dashboard
+- [x] Pick 2+ locations/climate zones for alert generation
+- [x] Build templated alert strings (English + at least 1 regional language)
+- [x] Wire alert generation to the extreme module's output
+- [x] Display alerts on dashboard
 
 ## Phase 7 — Polish / stretch (only if time remains)
 - [ ] Regime-gated ML model (LightGBM) replacing static inverse-error weights
