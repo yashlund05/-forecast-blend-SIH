@@ -151,29 +151,31 @@ class ExtremeDetector:
             )
 
         # -------------------------------------------------------------
-        # 3. 10m Wind Speed (Squall / Gale) Assessment
+        # 3. 10m Wind Speed (Squall vs Gale Distinct Phenomena)
         # -------------------------------------------------------------
         max_wind = float(df_sorted["wind_speed_10m"].max())
         max_wind_idx = df_sorted["wind_speed_10m"].idxmax()
         peak_time_wind = str(df_sorted.loc[max_wind_idx, "target_time"])
 
-        wind_cat, wind_alert = classify_wind(max_wind)
+        wind_cat, wind_alert = classify_wind(max_wind, topography=topography)
+        phenomenon = "GALE" if "Gale" in wind_cat or "Squally Weather" in wind_cat else "SQUALL"
+
         if wind_alert in ["YELLOW", "ORANGE", "RED"]:
-            advisory = self._get_wind_advisory(wind_alert, max_wind)
+            advisory = self._get_wind_advisory(wind_alert, max_wind, phenomenon=phenomenon)
             alerts.append(
                 HazardAlert(
                     location_id=location_id,
                     station_name=station_name,
                     state=state,
                     topography=topography,
-                    hazard_type="WIND",
+                    hazard_type=phenomenon,  # SQUALL (Ch 6 Convective) vs GALE (Ch 10 Synoptic)
                     alert_level=wind_alert,
                     category_name=wind_cat,
                     peak_value=round(max_wind, 1),
                     unit="km/h",
                     peak_time=peak_time_wind,
                     model_consensus_pct=100.0,
-                    description=f"Sustained wind speeds peaking at {max_wind:.1f} km/h.",
+                    description=f"Peak 10m wind speeds reaching {max_wind:.1f} km/h triggering {phenomenon} alert ({wind_cat}).",
                     action_advisory=advisory,
                 )
             )
@@ -265,18 +267,37 @@ class ExtremeDetector:
             )
 
     @staticmethod
-    def _get_wind_advisory(alert_level: str, max_wind: float) -> str:
-        if alert_level == "RED":
-            return (
-                "IMD RED ALERT (TAKE ACTION): Severe gale storm force winds. Structural damage to thatched roofs, unanchored hoardings, "
-                "and uprooting of large trees likely. Secure loose objects and stay indoors away from windows."
-            )
-        elif alert_level == "ORANGE":
-            return (
-                "IMD ORANGE ALERT (BE PREPARED): Gale/Squall force winds expected. Minor branch breakage, traffic hazards on open bridges. "
-                "Fishermen warned against venturing into sea/deep waters."
-            )
+    def _get_wind_advisory(alert_level: str, max_wind: float, phenomenon: str = "SQUALL") -> str:
+        if phenomenon == "GALE":
+            if alert_level == "RED":
+                return (
+                    "IMD RED ALERT (TAKE ACTION - SYNOPTIC GALE FORCE): Severe gale storm force winds exceeding 88 km/h. "
+                    "Extreme danger to shipping, total suspension of fishing operations, risk of extensive coastal infrastructure damage. "
+                    "Evacuate coastal lowlands and secure port installations per Chapter 10 SOP."
+                )
+            elif alert_level == "ORANGE":
+                return (
+                    "IMD ORANGE ALERT (BE PREPARED - SYNOPTIC GALE FORCE): Gale force winds (62-89 km/h) likely due to deep synoptic system. "
+                    "Fishermen strictly warned against venturing into deep sea. Coastal vessels advised to return to port."
+                )
+            else:
+                return (
+                    "IMD YELLOW ALERT (BE UPDATED - SQUALLY WEATHER): Squally weather with wind speed 45-60 km/h along coastal tracts. "
+                    "Fishermen advised to exercise extreme caution."
+                )
         else:
-            return (
-                "IMD YELLOW ALERT (BE UPDATED): Strong gusty winds expected. Secure lightweight balcony items and drive with caution."
-            )
+            # Convective Thunderstorm Squall (Chapter 6 SOP)
+            if alert_level == "RED":
+                return (
+                    "IMD RED ALERT (TAKE ACTION - CONVECTIVE SQUALL): Severe/Very severe thunderstorm squall with surface gusts >62 km/h. "
+                    "Danger of falling trees, billboard collapse, and structural damage to temporary shelters. Seek sturdy indoor shelter immediately."
+                )
+            elif alert_level == "ORANGE":
+                return (
+                    "IMD ORANGE ALERT (BE PREPARED - CONVECTIVE SQUALL): Moderate thunderstorm squall (41-61 km/h in gusts). "
+                    "Secure rooftop items and avoid standing under tall unanchored trees."
+                )
+            else:
+                return (
+                    "IMD YELLOW ALERT (BE UPDATED - GUSTY WINDS): Breezy to gusty convective conditions. Caution advised on roads."
+                )

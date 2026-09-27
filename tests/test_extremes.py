@@ -18,6 +18,8 @@ from extremes.thresholds import (
     classify_hourly_rainfall,
     classify_rainfall_24h,
     classify_wind,
+    classify_squall,
+    classify_gale,
     resolve_compound_alert,
 )
 from verification.guards import assert_strictly_test_period
@@ -95,26 +97,46 @@ def test_imd_heatwave_thresholds_by_topography():
     assert alert == "RED"
 
 
-def test_imd_wind_threshold_classification():
-    """Verify IMD squall and gale criteria (IMD SOP Ch 6 Sec 6.3.1)."""
-    cat, alert = classify_wind(25.0)
-    assert alert == "GREEN"
+def test_imd_squall_and_gale_distinct_classification():
+    """Verify distinct operational classification paths for Convective Squalls (Ch 6) vs Synoptic Gales (Ch 10)."""
+    # 1. Convective Thunderstorm Squall Path (Chapter 6 Section 6.3.1)
+    s_cat, s_alert = classify_squall(25.0)
+    assert s_alert == "GREEN"
 
-    cat, alert = classify_wind(40.5)
-    assert "Strong" in cat
-    assert alert == "YELLOW"
+    s_cat, s_alert = classify_squall(35.0)
+    assert "Gusty" in s_cat and s_alert == "YELLOW"
 
-    cat, alert = classify_wind(55.0)
-    assert "Squall" in cat
-    assert alert == "ORANGE"
+    s_cat, s_alert = classify_squall(55.0)
+    assert "Moderate Thunderstorm Squall" in s_cat and s_alert == "ORANGE"
 
-    cat, alert = classify_wind(70.0)
-    assert "Gale" in cat or "Squall" in cat
-    assert alert == "RED"
+    s_cat, s_alert = classify_squall(70.0)
+    assert "Severe Thunderstorm Squall" in s_cat and s_alert == "RED"
 
-    cat, alert = classify_wind(90.0)
-    assert "Severe Gale" in cat
-    assert alert == "RED"
+    s_cat, s_alert = classify_squall(95.0)
+    assert "Very Severe Thunderstorm Squall" in s_cat and s_alert == "RED"
+
+    # 2. Synoptic Cyclonic Gale Path (Chapter 10 Table 10.7)
+    g_cat, g_alert = classify_gale(30.0)
+    assert g_alert == "GREEN"
+
+    g_cat, g_alert = classify_gale(50.0)
+    assert "Squally Weather" in g_cat and g_alert == "YELLOW"
+
+    g_cat, g_alert = classify_gale(70.0)
+    assert "Gale Winds" in g_cat and g_alert == "ORANGE"
+
+    g_cat, g_alert = classify_gale(100.0)
+    assert "Moderate Gale" in g_cat and g_alert == "RED"
+
+    g_cat, g_alert = classify_gale(130.0)
+    assert "Very High Gale" in g_cat and g_alert == "RED"
+
+    # 3. Routing by topography in classify_wind
+    plains_cat, plains_alt = classify_wind(55.0, topography="plains")
+    assert "Squall" in plains_cat and plains_alt == "ORANGE"
+
+    coastal_cat, coastal_alt = classify_wind(70.0, topography="coastal")
+    assert "Gale" in coastal_cat and coastal_alt == "ORANGE"
 
 
 def test_resolve_compound_alert_priority():

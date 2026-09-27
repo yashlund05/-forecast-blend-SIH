@@ -123,9 +123,27 @@ IMD_HEAT_THRESHOLDS: Dict[str, Dict[str, float]] = {  # VERIFIED base thresholds
 HEATWAVE_THRESHOLD_TEMP_C = IMD_HEAT_BASE_PLAINS  # VERIFIED: IMD SOP (March 2021) Ch 7 Sec 7.3.1 Page 160
 
 # =====================================================================
-# IMD Official Wind Speed Thresholds (km/h)
-# VERIFIED: IMD SOP (March 2021) Chapter 6 Section 6.3.1 Page 140 & Chapter 10 Table 10.7 Page 248
+# IMD Official Squall Thresholds (Convective / Thunderstorm-Associated)
+# VERIFIED: IMD SOP (March 2021) Chapter 6 Section 6.3.1 Page 140
+# Governs: Chapter 6 convective thunderstorm downdrafts and localized squall lines
 # =====================================================================
+IMD_SQUALL_MODERATE_MIN = 41.0     # VERIFIED: IMD SOP (March 2021) Ch 6 Sec 6.3.1 Page 140 (41-61 km/h Moderate Squall, Orange)
+IMD_SQUALL_MODERATE_MAX = 61.0     # VERIFIED: IMD SOP (March 2021) Ch 6 Sec 6.3.1 Page 140 (41-61 km/h Moderate Squall, Orange)
+IMD_SQUALL_SEVERE_MIN = 62.0       # VERIFIED: IMD SOP (March 2021) Ch 6 Sec 6.3.1 Page 140 (62-87 km/h Severe Squall, Red)
+IMD_SQUALL_SEVERE_MAX = 87.0       # VERIFIED: IMD SOP (March 2021) Ch 6 Sec 6.3.1 Page 140 (62-87 km/h Severe Squall, Red)
+IMD_SQUALL_VERY_SEVERE_MIN = 88.0  # VERIFIED: IMD SOP (March 2021) Ch 6 Sec 6.3.1 Page 140 (>=88 km/h Very Severe Squall, Red)
+
+# =====================================================================
+# IMD Official Gale Thresholds (Synoptic / Maritime Cyclone-Associated)
+# VERIFIED: IMD SOP (March 2021) Chapter 10 Section 10.3.1 Table 10.7 Page 249
+# Governs: Chapter 10 synoptic-scale depressions, deep depressions, and maritime cyclonic storms
+# =====================================================================
+IMD_GALE_SQUALLY_WEATHER_MIN = 45.0 # VERIFIED: IMD SOP (March 2021) Ch 10 Table 10.7 Page 249 (45-61 km/h Squally Weather, Yellow)
+IMD_GALE_WINDS_MIN = 62.0           # VERIFIED: IMD SOP (March 2021) Ch 10 Table 10.7 Page 249 (62-89 km/h Gale Winds, Orange)
+IMD_GALE_MODERATE_MIN = 90.0        # VERIFIED: IMD SOP (March 2021) Ch 10 Table 10.7 Page 249 (90-119 km/h Moderate Gales, Red)
+IMD_GALE_VERY_HIGH_MIN = 120.0      # VERIFIED: IMD SOP (March 2021) Ch 10 Table 10.7 Page 249 (>=120 km/h Very High Gales, Red)
+
+# Legacy aliases for backward compatibility
 IMD_WIND_STRONG_BREEZE_MIN = 40.0  # VERIFIED: IMD SOP (March 2021) Ch 6 Sec 6.3.1 Page 140 (<40 light, >=40 gusty)
 IMD_WIND_SQUALL_MIN = 51.0         # UNVERIFIED - could not confirm against source, review before demo (SOP Sec 6.3.1 lists 41-61 km/h for moderate thunderstorm/squall)
 IMD_WIND_SQUALL_BASE_MIN = 41.0    # VERIFIED: IMD SOP (March 2021) Ch 6 Sec 6.3.1 Page 140 (41-61 km/h squall)
@@ -139,6 +157,7 @@ def classify_rainfall_24h(precip_mm: float) -> Tuple[str, str]:
     """Classify 24-hour accumulated rainfall according to official IMD categories.
     
     Source: IMD SOP (March 2021), Chapter 1 Section 1.7.2 Table 1.5, page 10.
+    Governs: Statutory 24-hour accumulated rainfall monitoring.
     
     Returns:
         (category_name, alert_level) where alert_level is GREEN, YELLOW, ORANGE, or RED.
@@ -179,6 +198,7 @@ def classify_heatwave(temp_c: float, topography: str = "plains") -> Tuple[str, s
     """Classify maximum surface temperature against topography-specific IMD heatwave thresholds.
     
     Source: IMD SOP (March 2021), Chapter 7 Section 7.3.1, page 160.
+    Governs: Chapter 7 synoptic and regional heatwave declaration criteria.
     
     Returns:
         (category_name, alert_level)
@@ -196,24 +216,62 @@ def classify_heatwave(temp_c: float, topography: str = "plains") -> Tuple[str, s
         return ("Normal Temperature", "GREEN")
 
 
-def classify_wind(wind_kmh: float) -> Tuple[str, str]:
-    """Classify 10m wind speed against IMD squall/gale criteria.
+def classify_squall(wind_kmh: float) -> Tuple[str, str]:
+    """Classify convective / thunderstorm-associated surface wind gusts.
     
-    Source: IMD SOP (March 2021), Chapter 6 Section 6.3.1, page 140 & Chapter 10 Table 10.7, page 248.
+    Source: IMD SOP (March 2021), Chapter 6 Section 6.3.1, page 140.
+    Governs: Chapter 6 convective thunderstorm downdrafts, squall lines, and meso-scale gusts.
     
     Returns:
         (category_name, alert_level)
     """
-    if wind_kmh >= IMD_WIND_SEVERE_GALE_MIN:
-        return ("Severe Gale / Cyclone Storm", "RED")
-    elif wind_kmh >= IMD_WIND_GALE_MIN:
-        return ("Gale Force Wind / Severe Squall", "RED")  # 62-87 km/h is Red in Sec 6.3.1
-    elif wind_kmh >= IMD_WIND_SQUALL_BASE_MIN:
-        return ("Moderate Squall / High Wind Warning", "ORANGE")  # 41-61 km/h is Orange in Sec 6.3.1
-    elif wind_kmh >= IMD_WIND_STRONG_BREEZE_MIN:
-        return ("Strong Gusty Breeze", "YELLOW")
+    if wind_kmh >= IMD_SQUALL_VERY_SEVERE_MIN:
+        return ("Very Severe Thunderstorm Squall (Convective)", "RED")
+    elif wind_kmh >= IMD_SQUALL_SEVERE_MIN:
+        return ("Severe Thunderstorm Squall (Convective)", "RED")
+    elif wind_kmh >= IMD_SQUALL_MODERATE_MIN:
+        return ("Moderate Thunderstorm Squall (Convective)", "ORANGE")
+    elif wind_kmh >= 30.0:
+        return ("Gusty Thunderstorm Breeze (Convective)", "YELLOW")
     else:
         return ("Normal Breeze", "GREEN")
+
+
+def classify_gale(wind_kmh: float) -> Tuple[str, str]:
+    """Classify synoptic / maritime cyclone-associated sustained gale winds.
+    
+    Source: IMD SOP (March 2021), Chapter 10 Table 10.7, page 249 & Chapter 8 Cyclone Warning.
+    Governs: Chapter 10 synoptic-scale depressions, deep depressions, and maritime gales.
+    
+    Returns:
+        (category_name, alert_level)
+    """
+    if wind_kmh >= IMD_GALE_VERY_HIGH_MIN:
+        return ("Very High Gale / Hurricane Force (Synoptic)", "RED")
+    elif wind_kmh >= IMD_GALE_MODERATE_MIN:
+        return ("Moderate Gale / Storm Force (Synoptic)", "RED")
+    elif wind_kmh >= IMD_GALE_WINDS_MIN:
+        return ("Gale Winds (Synoptic / Cyclonic)", "ORANGE")
+    elif wind_kmh >= IMD_GALE_SQUALLY_WEATHER_MIN:
+        return ("Squally Weather (Synoptic Fishermen Warning)", "YELLOW")
+    else:
+        return ("Normal Maritime Breeze", "GREEN")
+
+
+def classify_wind(wind_kmh: float, topography: str = "plains") -> Tuple[str, str]:
+    """Classify wind speed distinguishing between convective squall and synoptic gale phenomena.
+    
+    - In coastal or deltaic topographies during high wind states, evaluates synoptic gale criteria (Chapter 10).
+    - In plains, arid, or hill topographies, evaluates convective thunderstorm squall criteria (Chapter 6).
+    
+    Returns:
+        (category_name, alert_level)
+    """
+    topo = topography.lower()
+    if topo in ["coastal", "deltaic"] and wind_kmh >= IMD_GALE_SQUALLY_WEATHER_MIN:
+        return classify_gale(wind_kmh)
+    else:
+        return classify_squall(wind_kmh)
 
 
 def resolve_compound_alert(alert_levels: List[str]) -> str:

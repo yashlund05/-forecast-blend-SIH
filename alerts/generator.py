@@ -69,7 +69,7 @@ class DistrictAlertGenerator:
         issue_time = issued_at or datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
 
         hazard_type = alert.hazard_type.upper()
-        if hazard_type not in ["RAINFALL", "HEATWAVE", "WIND"]:
+        if hazard_type not in ["RAINFALL", "HEATWAVE", "WIND", "SQUALL", "GALE"]:
             hazard_type = "RAINFALL"
 
         level = alert.alert_level.upper()
