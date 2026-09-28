@@ -156,6 +156,7 @@ class WeightExplainabilityEngine:
                         "display_name": {
                             "ecmwf_ifs": "ECMWF IFS (0.25° Physics)",
                             "ecmwf_aifs": "ECMWF AIFS (0.25° AI/ML)",
+                            "weathernext": "Google WeatherNext 2 (0.25° AI/ML)",
                             "gfs": "NOAA GFS (0.25° Physics)",
                             "icon": "DWD ICON (0.25° Physics)",
                         }.get(m, m),

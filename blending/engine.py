@@ -13,10 +13,11 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-# Canonical model identifiers participating in the blend
+# Canonical model identifiers participating in the blend (3 NWP + 2 AI/ML)
 BLEND_MODELS: List[str] = [
     "ecmwf_ifs",
     "ecmwf_aifs",
+    "weathernext",
     "gfs",
     "icon",
 ]
@@ -28,7 +29,7 @@ BLEND_VARIABLES: List[str] = [
     "wind_speed_10m",
 ]
 
-# Default equal weights across all 4 models (0.25 each)
+# Default equal weights across all 5 models (0.20 each)
 DEFAULT_MODEL_WEIGHTS: Dict[str, float] = {
     model: 1.0 / len(BLEND_MODELS) for model in BLEND_MODELS
 }

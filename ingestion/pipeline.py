@@ -15,6 +15,7 @@ from ingestion.clients import (
     ArchiveClient,
     EnsembleClient,
     MultiModelClient,
+    WeatherNextClient,
 )
 from ingestion.config import (
     DEFAULT_FORECAST_DAYS,
@@ -35,12 +36,14 @@ class IngestionPipeline:
         db_manager: Optional[DatabaseManager] = None,
         multimodel_client: Optional[MultiModelClient] = None,
         aifs_client: Optional[AIFSClient] = None,
+        weathernext_client: Optional[WeatherNextClient] = None,
         ensemble_client: Optional[EnsembleClient] = None,
         archive_client: Optional[ArchiveClient] = None,
     ) -> None:
         self.db = db_manager or DatabaseManager()
         self.multimodel_client = multimodel_client or MultiModelClient()
         self.aifs_client = aifs_client or AIFSClient()
+        self.weathernext_client = weathernext_client or WeatherNextClient()
         self.ensemble_client = ensemble_client or EnsembleClient()
         self.archive_client = archive_client or ArchiveClient()
 
@@ -128,7 +131,33 @@ class IngestionPipeline:
             else:
                 loc_errors.append(f"AIFS: {aifs_res.error_message}")
 
-            # 3. Fetch Ensemble Spread
+            # 3. Fetch Google DeepMind WeatherNext 2 (AI/ML global model)
+            loc_attempted += 1
+            wn_res = self.weathernext_client.fetch(
+                latitude=loc_cfg.latitude,
+                longitude=loc_cfg.longitude,
+                forecast_days=forecast_days,
+            )
+            self.db.save_raw_payload(
+                fetch_timestamp=fetch_timestamp,
+                location_id=loc_id,
+                endpoint_type="ai_weathernext",
+                payload=wn_res.data,
+                is_success=wn_res.is_success,
+                error_message=wn_res.error_message,
+            )
+            if wn_res.is_success and wn_res.data:
+                loc_succeeded += 1
+                norm_wn = DataNormalizer.normalize_weathernext(
+                    raw_data=wn_res.data,
+                    location_id=loc_id,
+                    fetch_timestamp=fetch_timestamp,
+                )
+                self.db.save_normalized_forecasts(norm_wn)
+            else:
+                loc_errors.append(f"WeatherNext: {wn_res.error_message}")
+
+            # 4. Fetch Ensemble Spread
             loc_attempted += 1
             ens_res = self.ensemble_client.fetch(
                 latitude=loc_cfg.latitude,

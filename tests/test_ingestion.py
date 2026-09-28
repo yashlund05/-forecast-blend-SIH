@@ -20,6 +20,7 @@ from ingestion.clients import (
     EnsembleClient,
     FetchResult,
     MultiModelClient,
+    WeatherNextClient,
 )
 from ingestion.config import TARGET_LOCATIONS
 from ingestion.db import DatabaseManager
@@ -91,6 +92,22 @@ def test_live_aifs_ingestion_single_location():
     assert "temperature_2m" in hourly
     assert "precipitation" in hourly
     assert "wind_speed_10m" in hourly
+
+
+def test_live_weathernext_ingestion_single_location():
+    """Verify live WeatherNextClient returns valid Google DeepMind WeatherNext 2 data."""
+    client = WeatherNextClient()
+    delhi = TARGET_LOCATIONS["delhi"]
+    res = client.fetch(latitude=delhi.latitude, longitude=delhi.longitude, forecast_days=2)
+
+    assert res.is_success is True
+    assert res.data is not None
+    assert "hourly" in res.data
+    hourly = res.data["hourly"]
+    assert "temperature_2m" in hourly
+    assert "precipitation" in hourly
+    assert "wind_speed_10m" in hourly
+
 
 
 def test_data_normalizer_multimodel():
@@ -186,6 +203,20 @@ def test_graceful_degradation_on_failed_source(temp_db):
         status_code=503,
     )
 
+    mock_wn = MagicMock(spec=WeatherNextClient)
+    mock_wn.fetch.return_value = FetchResult(
+        source_name="ai_weathernext",
+        is_success=True,
+        data={
+            "hourly": {
+                "time": ["2026-09-28T00:00"],
+                "temperature_2m": [29.0],
+                "precipitation": [0.0],
+                "wind_speed_10m": [10.0],
+            }
+        },
+    )
+
     mock_ens = MagicMock(spec=EnsembleClient)
     mock_ens.fetch.return_value = FetchResult(
         source_name="ensemble",
@@ -203,6 +234,7 @@ def test_graceful_degradation_on_failed_source(temp_db):
         db_manager=temp_db,
         multimodel_client=mock_mm,
         aifs_client=mock_aifs,
+        weathernext_client=mock_wn,
         ensemble_client=mock_ens,
     )
 
@@ -210,13 +242,14 @@ def test_graceful_degradation_on_failed_source(temp_db):
 
     # Assert pipeline did not crash and marked status as degraded
     assert result["status"] == "degraded"
-    assert result["sources_succeeded"] == 2
-    assert result["sources_attempted"] == 3
+    assert result["sources_succeeded"] == 3
+    assert result["sources_attempted"] == 4
 
     # Assert successfully fetched data was stored
     forecasts = temp_db.get_latest_forecasts(location_id="mumbai")
     assert not forecasts.empty
-    assert set(forecasts["model"].unique()) == {"gfs"}
+    assert "gfs" in forecasts["model"].unique()
+    assert "weathernext" in forecasts["model"].unique()
 
     # Assert raw payload cache contains the logged failure
     with temp_db.get_connection() as conn:
@@ -225,6 +258,87 @@ def test_graceful_degradation_on_failed_source(temp_db):
         ).fetchall()
         assert len(failures) == 1
         assert "503" in failures[0]["error_message"]
+
+
+def test_graceful_degradation_on_failed_weathernext(temp_db):
+    """Verify pipeline degrades gracefully when WeatherNext 2 fails (Hard Rule 6)."""
+    mock_mm = MagicMock(spec=MultiModelClient)
+    mock_mm.fetch.return_value = FetchResult(
+        source_name="nwp_multimodel",
+        is_success=True,
+        data={
+            "hourly": {
+                "time": ["2026-09-28T00:00"],
+                "temperature_2m_gfs_seamless": [28.0],
+                "precipitation_gfs_seamless": [0.0],
+                "wind_speed_10m_gfs_seamless": [10.0],
+            }
+        },
+    )
+
+    mock_aifs = MagicMock(spec=AIFSClient)
+    mock_aifs.fetch.return_value = FetchResult(
+        source_name="ai_aifs",
+        is_success=True,
+        data={
+            "hourly": {
+                "time": ["2026-09-28T00:00"],
+                "temperature_2m": [28.5],
+                "precipitation": [0.0],
+                "wind_speed_10m": [9.0],
+            }
+        },
+    )
+
+    # WeatherNext 2 simulated outage / rate limit
+    mock_wn = MagicMock(spec=WeatherNextClient)
+    mock_wn.fetch.return_value = FetchResult(
+        source_name="ai_weathernext",
+        is_success=False,
+        error_message="HTTP 429: Too Many Requests (Rate limit reached)",
+        status_code=429,
+    )
+
+    mock_ens = MagicMock(spec=EnsembleClient)
+    mock_ens.fetch.return_value = FetchResult(
+        source_name="ensemble",
+        is_success=True,
+        data={
+            "hourly": {
+                "time": ["2026-09-28T00:00"],
+                "temperature_2m_member01": [28.0],
+            }
+        },
+    )
+
+    pipeline = IngestionPipeline(
+        db_manager=temp_db,
+        multimodel_client=mock_mm,
+        aifs_client=mock_aifs,
+        weathernext_client=mock_wn,
+        ensemble_client=mock_ens,
+    )
+
+    result = pipeline.run_live_forecast_ingestion(locations=["delhi"], forecast_days=1)
+
+    assert result["status"] == "degraded"
+    assert result["sources_succeeded"] == 3
+    assert result["sources_attempted"] == 4
+
+    # Successfully fetched models are stored without crash
+    forecasts = temp_db.get_latest_forecasts(location_id="delhi")
+    assert not forecasts.empty
+    assert "gfs" in forecasts["model"].unique()
+    assert "ecmwf_aifs" in forecasts["model"].unique()
+    assert "weathernext" not in forecasts["model"].unique()
+
+    # Raw payload cache stores the failure
+    with temp_db.get_connection() as conn:
+        failures = conn.execute(
+            "SELECT * FROM raw_payload_cache WHERE is_success = 0"
+        ).fetchall()
+        assert len(failures) == 1
+        assert "429" in failures[0]["error_message"]
 
 
 def test_ingestion_scheduler_calculation(temp_db):

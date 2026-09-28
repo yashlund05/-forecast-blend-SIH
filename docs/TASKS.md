@@ -10,7 +10,7 @@ move to the next phase with a broken build.
 
 ## Phase 1 — Ingestion (Module 1)
 - [x] Write API client for multi-model forecast endpoint (GFS, ICON, IFS)
-- [x] Write API client for AIFS endpoint, handle its 6-hourly resolution explicitly
+- [x] Write API clients for AI models: ECMWF AIFS and Google DeepMind WeatherNext 2 (2 AI : 3 NWP models); handle 6-hourly temporal resolution explicitly
 - [x] Write API client for ensemble endpoint
 - [x] Write API client for historical/archive endpoint
 - [x] Normalize all responses into one common schema

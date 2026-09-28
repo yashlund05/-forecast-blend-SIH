@@ -187,6 +187,90 @@ class DataNormalizer:
         return df[cols]
 
     @staticmethod
+    def normalize_weathernext(
+        raw_data: Dict[str, Any],
+        location_id: str,
+        fetch_timestamp: str,
+    ) -> pd.DataFrame:
+        """Normalize Google DeepMind WeatherNext 2 ML forecast.
+        
+        Handles native 6-hourly resolution of WeatherNext 2, reconciling intervening
+        hours via explicit linear interpolation and setting is_interpolated flag.
+        """
+        if not raw_data or "hourly" not in raw_data:
+            return pd.DataFrame()
+
+        hourly = raw_data["hourly"]
+        times = hourly.get("time", [])
+        if not times:
+            return pd.DataFrame()
+
+        fetch_dt = parse_iso_datetime(fetch_timestamp)
+        temps = hourly.get("temperature_2m", [])
+        precips = hourly.get("precipitation", [])
+        winds = hourly.get("wind_speed_10m", [])
+
+        df = pd.DataFrame(
+            {
+                "target_time": times,
+                "temperature_2m": temps,
+                "precipitation": precips,
+                "wind_speed_10m": winds,
+            }
+        )
+
+        for col in ["temperature_2m", "precipitation", "wind_speed_10m"]:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+        valid_count = df["temperature_2m"].count()
+        total_count = len(df)
+        is_sparse = 0 < valid_count < (total_count * 0.8)
+
+        if is_sparse:
+            logger.info(
+                "WeatherNext 2 data for %s has %d/%d valid points. Interpolating step resolution.",
+                location_id,
+                valid_count,
+                total_count,
+            )
+            df["temperature_2m"] = df["temperature_2m"].interpolate(method="linear")
+            df["wind_speed_10m"] = df["wind_speed_10m"].interpolate(method="linear")
+            df["precipitation"] = df["precipitation"].fillna(0.0)
+            interpolated_flag = 1
+        else:
+            interpolated_flag = 0
+
+        df = df.dropna(subset=["temperature_2m"]).copy()
+        if df.empty:
+            return pd.DataFrame()
+
+        df["fetch_timestamp"] = fetch_timestamp
+        df["location_id"] = location_id
+        df["model"] = "weathernext"
+        df["wind_gusts_10m"] = None
+        df["is_interpolated"] = interpolated_flag
+
+        target_dts = [parse_iso_datetime(t) for t in df["target_time"]]
+        df["lead_time_hours"] = [
+            round(max(0.0, (tdt - fetch_dt).total_seconds() / 3600.0), 2)
+            for tdt in target_dts
+        ]
+
+        cols = [
+            "fetch_timestamp",
+            "location_id",
+            "target_time",
+            "lead_time_hours",
+            "model",
+            "temperature_2m",
+            "precipitation",
+            "wind_speed_10m",
+            "wind_gusts_10m",
+            "is_interpolated",
+        ]
+        return df[cols]
+
+    @staticmethod
     def normalize_ensemble(
         raw_data: Dict[str, Any],
         location_id: str,

@@ -20,6 +20,8 @@ from ingestion.config import (
     MULTIMODEL_SOURCE_MODELS,
     MULTIMODEL_URL,
     REQUEST_TIMEOUT_SECONDS,
+    WEATHERNEXT_URL,
+    WEATHERNEXT_VARIABLES,
 )
 
 logger = logging.getLogger(__name__)
@@ -135,6 +137,34 @@ class AIFSClient(BaseWeatherClient):
             url=ECMWF_AIFS_URL,
             params=params,
             source_name="ai_aifs",
+        )
+
+
+class WeatherNextClient(BaseWeatherClient):
+    """Client for Google DeepMind WeatherNext 2 (AI/ML global weather model).
+    
+    Provides 0.25° resolution AI forecasts directly via Open-Meteo Ensemble API.
+    Native temporal resolution is 6-hourly; interpolated/reconciled by DataNormalizer.
+    """
+
+    def fetch(
+        self,
+        latitude: float,
+        longitude: float,
+        forecast_days: int = DEFAULT_FORECAST_DAYS,
+    ) -> FetchResult:
+        params = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "hourly": ",".join(WEATHERNEXT_VARIABLES),
+            "models": "google_weathernext2_ensemble",
+            "forecast_days": forecast_days,
+            "timezone": "UTC",
+        }
+        return self._execute_get(
+            url=WEATHERNEXT_URL,
+            params=params,
+            source_name="ai_weathernext",
         )
 
 

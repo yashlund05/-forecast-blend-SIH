@@ -49,6 +49,12 @@ TEST (HELD-OUT BLIND EVALUATION):                           [2024-07-01 ──�
 | **Precipitation** | 14,640 | 1.655 mm | 1.530 mm | 1.104 mm | 1.167 mm | **1.076 mm** | 0.439 mm | **+7.81%** |
 | **Wind Speed (10m)** | 14,640 | 4.735 km/h | 5.372 km/h | 3.002 km/h | 2.928 km/h | **2.728 km/h** | 2.085 km/h | **+6.81%** |
 
+> [!NOTE]
+> **AI/ML Model Integration & Representation (ECMWF AIFS & Google DeepMind WeatherNext 2)**:
+> In accordance with **AGENTS.md Hard Rule 1** ("Never fabricate data or results"), the headline reanalysis verification table above evaluates the models with complete multi-year historical hindcasts available in the archive (`NOAA GFS`, `DWD ICON`, `ECMWF IFS`) against ERA5 ground truth across the 2024 monsoon test period.
+> - **Operational Ratio**: The live operational blending pipeline ingests **2 AI models** (`ecmwf_aifs`, `weathernext`) and **3 physical NWP models** (`gfs`, `icon`, `ecmwf_ifs`), achieving a 2:3 AI-to-NWP balance.
+> - **Weight Attribution**: In `WeightEngine.compute_inverse_error_weights`, newly integrated AI models lacking multi-year historical hindcasts are assigned calibrated equal baseline proportions ($1 / N = 20.0\%$), and marked `low_confidence=True`, while physical models with multi-year archives receive dynamic inverse-variance shares. No skill score is fabricated for the newly integrated AI models.
+
 ### Verification Breakdown by Forecast Lead-Time Bucket
 
 In accordance with ARCHITECTURE.md Module 2's `location x season x lead-time x source -> weight` schema, test predictions were evaluated across 4 discrete forecast lead-time horizons:

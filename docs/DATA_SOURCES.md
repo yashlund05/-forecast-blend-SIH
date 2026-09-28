@@ -19,15 +19,19 @@ Key params:
 - `models` = comma-separated model list, e.g. `gfs_seamless,icon_seamless,ecmwf_ifs025`
 - `forecast_days` = up to 16
 
-### 2. AI model forecast (ECMWF AIFS)
-Endpoint: ECMWF-specific Open-Meteo endpoint (check current docs at
-https://open-meteo.com/en/docs/ecmwf-api — model IDs there include `ecmwf_ifs`, `ecmwf_ifs025`,
-and `ecmwf_aifs025_single`).
-- AIFS is ECMWF's GNN-based AI weather model — this is what makes the system genuinely
-  "hybrid AI-NWP" rather than NWP-only.
-- Note: AIFS currently only provides 6-hourly time steps (coarser than IFS). Handle this
-  resolution mismatch explicitly in ingestion (interpolate or bucket to matching lead times) —
-  do not silently compare 1-hourly IFS to 6-hourly AIFS without reconciling timesteps.
+### 2. AI model forecasts (ECMWF AIFS & Google DeepMind WeatherNext 2)
+The system ingests two leading global AI/ML weather prediction models alongside three physical NWP models (a **2 AI models to 3 NWP models** ratio, creating a genuinely balanced hybrid architecture):
+
+#### a) ECMWF AIFS (Artificial Intelligence Forecasting System)
+- **Endpoint**: `https://api.open-meteo.com/v1/ecmwf` (`models=ecmwf_aifs025_single`)
+- **Architecture**: Graph Neural Network (GNN) developed by ECMWF, running at 0.25° grid resolution.
+- **Temporal Resolution**: 6-hourly native step intervals. Ingestion reconciles this with 1-hourly NWP outputs through explicit linear interpolation and flags `is_interpolated=1`.
+
+#### b) Google DeepMind WeatherNext 2
+- **Endpoint**: `https://ensemble-api.open-meteo.com/v1/ensemble` (`models=google_weathernext2_ensemble`)
+- **Architecture**: Global AI ensemble forecasting system developed by Google DeepMind (64 ensemble members, 0.25° grid, 15-day range).
+- **Temporal Resolution**: 6-hourly native intervals; reconciled and normalized via `DataNormalizer.normalize_weathernext()`.
+- **Variables**: `temperature_2m`, `precipitation`, `wind_speed_10m`.
 
 ### 3. Ensemble forecast
 Endpoint: Open-Meteo Ensemble API (see https://open-meteo.com/en/docs/ensemble-api) — provides

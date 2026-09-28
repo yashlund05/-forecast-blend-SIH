@@ -65,14 +65,16 @@ def compute_inverse_error_weights(
 
     total_inv = sum(valid_inv_scores.values())
 
-    # If some models are missing samples (e.g. newly introduced AI model AIFS),
+    # If some models are missing samples (e.g. newly introduced AI models AIFS / WeatherNext 2),
     # allocate a baseline equal share to uncalibrated models and distribute the rest
     # among calibrated models according to inverse error, marking low_confidence=True.
     weights: Dict[str, float] = {}
     if len(valid_inv_scores) < n_models:
-        # Uncalibrated models get equal proportion, calibrated share the remainder
-        uncalibrated_share = 0.25 * (n_models - len(valid_inv_scores))
-        calibrated_share = 1.0 - uncalibrated_share
+        # Each uncalibrated model gets an equal baseline slice (1 / n_models)
+        uncalibrated_per_model = equal_weight
+        num_uncalibrated = n_models - len(valid_inv_scores)
+        uncalibrated_share = uncalibrated_per_model * num_uncalibrated
+        calibrated_share = max(0.0, 1.0 - uncalibrated_share)
 
         for m in models:
             if m in valid_inv_scores:
@@ -80,7 +82,7 @@ def compute_inverse_error_weights(
                     calibrated_share * (valid_inv_scores[m] / total_inv), 4
                 )
             else:
-                weights[m] = 0.25
+                weights[m] = round(uncalibrated_per_model, 4)
         is_low_confidence = len(valid_inv_scores) < 2
     else:
         for m in models:
@@ -308,11 +310,85 @@ class WeightEngine:
                         "zone": cfg.zone,
                         "topography": cfg.topography,
                         "dominant_model": "equal_weight",
-                        "weight": 0.25,
+                        "weight": round(1.0 / len(BLEND_MODELS), 4),
                         "rmse": None,
                         "low_confidence": True,
                     }
                 )
 
         return pd.DataFrame(rows)
+
+
+def interpolate_weight_grid(
+    station_lats: np.ndarray,
+    station_lons: np.ndarray,
+    station_values: np.ndarray,
+    grid_lat_min: float = 8.0,
+    grid_lat_max: float = 36.0,
+    grid_lon_min: float = 68.0,
+    grid_lon_max: float = 96.0,
+    n_points_lat: int = 25,
+    n_points_lon: int = 25,
+    power: float = 2.0,
+    eps: float = 1e-5,
+) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Coarse spatial interpolation of station weights onto a regular national grid using IDW.
+
+    CAVEAT / METHODOLOGICAL DISCLAIMER:
+    This spatial interpolation is a coarse visual representation derived from only 10 national
+    stations across India. It does NOT claim true gridded NWP skill or fine-scale local variance.
+    Its purpose is to provide forecasters and technical evaluators with an indicative regional
+    contour of model dominance and relative weight transitions across synoptic zones.
+
+    Args:
+        station_lats: Array of station latitudes (1D).
+        station_lons: Array of station longitudes (1D).
+        station_values: Array of station values/weights (1D).
+        grid_lat_min: Southern boundary (default 8°N).
+        grid_lat_max: Northern boundary (default 36°N).
+        grid_lon_min: Western boundary (default 68°E).
+        grid_lon_max: Eastern boundary (default 96°E).
+        n_points_lat: Number of latitude grid divisions.
+        n_points_lon: Number of longitude grid divisions.
+        power: Distance decay exponent (default 2.0 for quadratic inverse distance).
+        eps: Small tolerance to avoid division by zero at station coordinates.
+
+    Returns:
+        (grid_lats, grid_lons, interpolated_grid_2d)
+        - grid_lats: 1D array of latitude coordinates.
+        - grid_lons: 1D array of longitude coordinates.
+        - interpolated_grid_2d: 2D array of interpolated values (shape: [n_points_lat, n_points_lon]).
+    """
+    lats = np.asarray(station_lats, dtype=float)
+    lons = np.asarray(station_lons, dtype=float)
+    vals = np.asarray(station_values, dtype=float)
+
+    if len(lats) == 0 or len(vals) == 0:
+        raise ValueError("Cannot interpolate with empty station inputs.")
+
+    grid_lats = np.linspace(grid_lat_min, grid_lat_max, n_points_lat)
+    grid_lons = np.linspace(grid_lon_min, grid_lon_max, n_points_lon)
+
+    # Meshgrid: shape (n_points_lat, n_points_lon)
+    mesh_lons, mesh_lats = np.meshgrid(grid_lons, grid_lats)
+
+    # Euclidean distance in lat-lon space: shape (n_lat, n_lon, n_stations)
+    dists = np.sqrt(
+        (mesh_lats[:, :, None] - lats[None, None, :]) ** 2 +
+        (mesh_lons[:, :, None] - lons[None, None, :]) ** 2
+    )
+
+    exact_matches = dists < eps
+    with np.errstate(divide="ignore"):
+        idw_weights = 1.0 / (dists ** power)
+
+    # Assign high finite weight for exact station coordinates
+    idw_weights = np.where(exact_matches, 1e12, idw_weights)
+    total_weights = np.sum(idw_weights, axis=-1, keepdims=True)
+
+    # Compute weighted sum
+    interp_grid = np.sum(idw_weights * vals[None, None, :], axis=-1) / np.squeeze(total_weights, axis=-1)
+
+    return grid_lats, grid_lons, interp_grid
+
 

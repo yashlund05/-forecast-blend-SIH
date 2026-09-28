@@ -23,7 +23,7 @@ from ingestion.config import TARGET_LOCATIONS
 from ingestion.db import DatabaseManager
 from ingestion.pipeline import IngestionPipeline
 from weighting.skill import LEAD_TIME_BUCKETS, SEASONS
-from weighting.weights import WeightEngine
+from weighting.weights import WeightEngine, interpolate_weight_grid
 
 st.set_page_config(
     page_title="Hybrid AI–NWP Forecast Blend | SIH 26081",
@@ -209,12 +209,13 @@ if st.sidebar.button("🔄 Recalculate Learned Weights (Train Period)"):
         st.sidebar.success(f"Generated {len(df_w)} learned weights across stations!")
         st.rerun()
 
-# Model styling palette
+# Model styling palette (3 NWP + 2 AI/ML)
 model_styles = {
     "gfs": {"name": "NOAA GFS", "color": "#1f77b4", "dash": "dot"},
     "icon": {"name": "DWD ICON", "color": "#ff7f0e", "dash": "dot"},
     "ecmwf_ifs": {"name": "ECMWF IFS (Physics)", "color": "#2ca02c", "dash": "dash"},
     "ecmwf_aifs": {"name": "ECMWF AIFS (AI/ML)", "color": "#9467bd", "dash": "dashdot"},
+    "weathernext": {"name": "Google WeatherNext 2 (AI/ML)", "color": "#e377c2", "dash": "longdash"},
     "equal_weight": {"name": "Equal Weight", "color": "#7f7f7f", "dash": "solid"},
 }
 
@@ -516,6 +517,25 @@ with tab_weight_map:
             format_func=lambda v: "Temperature" if "temp" in v else "Precipitation" if "precip" in v else "Wind Speed",
         )
 
+    # Coarse IDW Spatial Interpolation Controls & Caveat
+    map_ctrl1, map_ctrl2 = st.columns([2, 2])
+    with map_ctrl1:
+        map_view_mode = st.radio(
+            "Spatial Map Presentation",
+            options=["Continuous Regional Field (IDW Interpolation)", "Discrete Station Points Only"],
+            index=0,
+            horizontal=True,
+            help="Interpolates per-station weights onto a coarse 25x25 grid across India using Inverse Distance Weighting (IDW).",
+        )
+    with map_ctrl2:
+        st.markdown(
+            """
+            <div style="background-color: #fff3cd; color: #856404; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; border-left: 4px solid #ffeeba;">
+                ⚠️ <b>Methodological Caveat</b>: Continuous field is a <b>coarse indicative visual interpolation</b> derived from 10 national benchmark stations. It illustrates regional dominance transitions and is not a claim of fine-scale gridded NWP skill.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     # Query dominant model data across all 10 locations
     map_df = weight_engine.get_dominant_model_map(
@@ -528,7 +548,57 @@ with tab_weight_map:
     # Plot geographic station map centered on India
     map_fig = go.Figure()
 
-    # Add each station as a scatter geo marker
+    # If Continuous Regional Field is selected, perform IDW spatial interpolation
+    if "Continuous" in map_view_mode and not map_df.empty:
+        # Coarse visual interpolation from 10 stations
+        stn_lats = map_df["latitude"].values
+        stn_lons = map_df["longitude"].values
+        stn_weights = map_df["weight"].values
+
+        grid_lats, grid_lons, interp_grid = interpolate_weight_grid(
+            station_lats=stn_lats,
+            station_lons=stn_lons,
+            station_values=stn_weights,
+            n_points_lat=28,
+            n_points_lon=28,
+            power=2.0,
+        )
+
+        mesh_lons, mesh_lats = np.meshgrid(grid_lons, grid_lats)
+        flat_lats = mesh_lats.flatten()
+        flat_lons = mesh_lons.flatten()
+        flat_vals = interp_grid.flatten()
+
+        map_fig.add_trace(
+            go.Scattergeo(
+                lat=flat_lats,
+                lon=flat_lons,
+                mode="markers",
+                marker=dict(
+                    size=12,
+                    color=flat_vals,
+                    colorscale="Tealgrn",
+                    opacity=0.35,
+                    symbol="square",
+                    showscale=True,
+                    colorbar=dict(
+                        title=dict(text="Dominant Weight", font=dict(size=11)),
+                        tickformat=".0%",
+                        len=0.75,
+                        thickness=14,
+                        x=1.02,
+                    ),
+                ),
+                hoverinfo="text",
+                hovertext=[
+                    f"Regional Interpolated Weight: {v * 100:.1f}%<br>Lat: {la:.1f}°N, Lon: {lo:.1f}°E<br><i>(Coarse IDW field from 10 stations)</i>"
+                    for la, lo, v in zip(flat_lats, flat_lons, flat_vals)
+                ],
+                name="Interpolated Regional Weight (IDW)",
+            )
+        )
+
+    # Add each station as a scatter geo marker on top of the interpolated field
     for _, row in map_df.iterrows():
         m_id = row["dominant_model"]
         m_style = model_styles.get(m_id, model_styles["equal_weight"])
@@ -554,21 +624,21 @@ with tab_weight_map:
                 hoverinfo="text",
                 hovertext=hover_txt,
                 marker=dict(
-                    size=max(14, int(row["weight"] * 40)),
+                    size=max(16, int(row["weight"] * 44)),
                     color=m_style["color"],
                     symbol="diamond" if is_low_conf else "circle",
                     line=dict(
-                        width=2,
+                        width=2.5,
                         color="#d9534f" if is_low_conf else "#ffffff",
                     ),
-                    opacity=0.9,
+                    opacity=0.95,
                 ),
                 showlegend=False,
             )
         )
 
     map_fig.update_layout(
-        title=f"<b>Dominant Model by Region: {map_season.capitalize()} | {map_regime.replace('_', ' ').title()} ({map_var.replace('_', ' ').capitalize()})</b>",
+        title=f"<b>Dominant Model Weight Map: {map_season.capitalize()} | {map_regime.replace('_', ' ').title()} ({map_var.replace('_', ' ').capitalize()})</b>",
         geo=dict(
             scope="asia",
             center=dict(lat=21.5, lon=82.5),
@@ -594,8 +664,9 @@ with tab_weight_map:
         st.markdown(
             """
             **Map Legend & Trust Indicators**:  
-            🟢 **ECMWF IFS (Physics)** | 🟣 **ECMWF AIFS (AI/ML)** | 🔵 **NOAA GFS** | 🟠 **DWD ICON**  
-            - **Circle Marker (●)**: High confidence (verified on $\ge 30$ historical reanalysis samples).  
+            🟢 **ECMWF IFS (Physics)** | 🟣 **ECMWF AIFS (AI/ML)** | 🌸 **Google WeatherNext 2 (AI/ML)** | 🔵 **NOAA GFS** | 🟠 **DWD ICON**  
+            - **Solid Marker (● / ◆)**: Actual calibrated station ground truth.  
+            - **Shaded Background Grid**: Coarse IDW spatial field showing regional weight transitions.  
             - **Diamond with Red Border (◆)**: Low confidence flag (insufficient samples, fallback active).  
             - **Marker Size**: Proportional to dominant model weight.
             """

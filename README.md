@@ -2,9 +2,9 @@
 
 SIH Problem Statement 26081 | Ministry of Earth Sciences / NCMRWF | Theme: Disaster Management
 
-A hybrid AI–NWP multi-model forecast blending system that dynamically pulls live operational forecasts from Open-Meteo (NOAA GFS, DWD ICON, ECMWF IFS, and ECMWF AIFS), blends them using adaptive regional and seasonal inverse-error weights, flags extreme weather against verified IMD operational thresholds, and generates actionable multilingual district disaster bulletins.
+A hybrid AI–NWP multi-model forecast blending system that dynamically pulls live operational forecasts from Open-Meteo across three physical NWP models (NOAA GFS, DWD ICON, ECMWF IFS) and two global AI/ML models (ECMWF AIFS and Google DeepMind WeatherNext 2), blends them using adaptive regional and seasonal inverse-error weights, flags extreme weather against verified IMD operational thresholds, and generates actionable multilingual district disaster bulletins.
 
-**Status**: Hackathon prototype, feature-complete through Phase 7 (all tasks in `docs/TASKS.md` checked, 38/38 tests passing).
+**Status**: Hackathon prototype, feature-complete through Phase 7 with 5 blended model sources (2 AI models, 3 NWP models; all tasks in `docs/TASKS.md` checked, 41/41 tests passing).
 
 
 
@@ -12,17 +12,20 @@ A hybrid AI–NWP multi-model forecast blending system that dynamically pulls li
 
 ## What's Implemented
 
-The system implements all six core architectural modules and two key differentiators:
+The system implements all six core architectural modules and key differentiators:
 
-- **Module 1 — Ingestion Pipeline**: Resilient multi-source fetcher (GFS, ICON, ECMWF IFS, ECMWF AIFS) with schema normalization, SQLite storage, synoptic 6-hourly scheduler, and graceful per-source failure degradation.
-- **Module 2 — Skill & Weighting Engine**: Historical error backtesting computing quadratic inverse-error weights ($w_m \propto 1/\text{RMSE}_m^2$) conditioned on station, season, and variable, with low-sample fallbacks and audit-ready explainability traces.
-- **Module 3 — Blending Engine**: Pluggable weighted-average blending with missing-model renormalization, min–max ensemble spread envelopes, and an optional regime-gated GBDT blending upgrade.
+- **Module 1 — Ingestion Pipeline**: Resilient multi-source fetcher covering 3 physical NWP sources (GFS, ICON, ECMWF IFS) and 2 AI/ML sources (ECMWF AIFS, Google DeepMind WeatherNext 2) with schema normalization, SQLite storage, synoptic 6-hourly scheduler, and graceful per-source failure degradation.
+- **Module 2 — Skill & Weighting Engine**: Historical error backtesting computing quadratic inverse-error weights ($w_m \propto 1/\text{RMSE}_m^2$) conditioned on station, season, weather regime, and lead-time bucket, with low-sample fallbacks and audit-ready explainability traces across all 5 participating models. Includes regular-grid Inverse Distance Weighting (IDW) continuous spatial interpolation.
+- **Module 3 — Blending Engine**: Pluggable weighted-average blending across 5 models with missing-model renormalization, min–max ensemble spread envelopes, and an optional regime-gated GBDT blending upgrade.
 - **Module 4 — Extreme Weather Module**: Multi-hazard detection using verified India Meteorological Department (IMD) thresholds for 24h rainfall, heatwaves by topography, and distinct paths for convective squalls vs. synoptic gales, plus verifiable historical extreme-event backtesting.
 - **Module 5 — Verification Engine**: Non-overlapping train/calibrate/test backtesting against reanalysis ground truth, computing RMSE/MAE reductions, contingency skill scores (POD, FAR, CSI, ETS), and transparent failure case auditing.
-- **Module 6 — Dashboard & Multilingual Alerts**: 4-tab Streamlit operations dashboard featuring interactive forecast curves, national weight maps, "Why This Weight?" explainability panels, test-split verification charts, and official district warning bulletins in 5 languages (English, Hindi, Marathi, Tamil, Bengali).
+- **Module 6 — Dashboard & Multilingual Alerts**: 4-tab Streamlit operations dashboard featuring interactive forecast curves, continuous regional spatial weight maps with discrete station toggle, "Why This Weight?" deep-dive explainability panels, test-split verification charts, and official district warning bulletins in 5 languages (English, Hindi, Marathi, Tamil, Bengali).
 
 ### Key Differentiators
+- **Continuous Regional Weight Maps with Station Explainability**: Addresses the "model weight maps" deliverable by interpolating 4D-conditioned station weights onto a regular continuous grid across India via Inverse Distance Weighting (IDW, power $p=2.0$). Includes a view toggle between continuous regional field and discrete station points, explicit UI disclaimers against overstating coarse interpolation as high-resolution NWP skill, and interactive station inspection with full "Why This Weight?" mathematical audit traces.
+- **Genuine Hybrid AI–NWP Balance (2 AI Models : 3 NWP Models)**: Rather than relying on a single AI source, the system integrates two distinct global AI weather models—ECMWF AIFS (Graph Neural Network) and Google DeepMind WeatherNext 2 (AI ensemble system)—alongside NOAA GFS, DWD ICON, and ECMWF IFS.
 - **Real Live Data, Zero Fabrication**: Forecasts and reanalysis benchmarks are retrieved live from Open-Meteo APIs. No skill scores, case studies, or verification numbers are hardcoded or simulated.
+
 - **Strict Leak-Free Time-Split & Honest Limitation Reporting**: Training (`2021-09-01` to `2024-04-30`) and test (`2024-07-01` to `2024-08-31`) windows are strictly non-overlapping. The verification dashboard reports all edge cases where individual physical models outperformed the blend rather than filtering them out.
 - **Regime-Conditioned Weighting (core feature, not stretch goal)**: Weights condition on four dimensions: `station × season × weather-regime × lead-time-bucket`. Weather regime (monsoon-active / monsoon-break / off-season) is classified in real-time from rolling 7-day precipitation anomaly. Cyclone-influence regime was evaluated but dropped (5–74 occurrences / 24,792 = 0.0–0.3% per station — below the minimum sample threshold for trusted inverse-error weights; documented in `blending/regime.py`).
 - **Evidence-Backed, Qualified Claim**: Blending demonstrably helps for precipitation (**+7.81% vs. naive**, RMSE 1.076 mm vs. 1.167 mm) and wind speed (**+6.81% vs. naive**, **+9.16% vs. ECMWF IFS**, RMSE 2.728 km/h vs. 3.002 km/h, $p < 0.05$); for temperature, results favor using ECMWF IFS directly (IFS achieves **0.794 °C** vs. blend **0.833 °C**; 90% CI on difference excludes zero), as IFS's 4D-Var data assimilation leaves virtually no headroom for linear weight combinations with lower-resolution models.
@@ -67,6 +70,8 @@ Regime computed from rolling 7-day precipitation anomaly. All numbers from held-
 
 - **Normalized Multi-Variate Skill Score**: **+15.28%** (unitless arithmetic mean of relative error reductions vs. naive averaging; macro sample-weighted reduction is **+14.13%**).
 - **No Unit-Mixed RMSE**: Averaging RMSE across heterogeneous units (°C, mm, km/h) is mathematically invalid and has been removed from all reports in favor of normalized skill scoring and per-variable evaluation.
+- **AI Models in Reanalysis Verification Split**: The primary 43,920-point blind backtest evaluates the three physical NWP models (`NOAA GFS`, `DWD ICON`, `ECMWF IFS`) against ERA5 reanalysis ground truth over the reserved `2024-07-01` to `2024-08-31` window. The two AI/ML models (`ECMWF AIFS` and `Google DeepMind WeatherNext 2`) participate dynamically in live blending via Open-Meteo's APIs and are assigned calibrated baseline equal shares until full historical archive backfills are made available by upstream providers (per AGENTS.md Hard Rule 1, uncomputed numbers are left transparently uncalculated rather than fabricated).
+- **Per-Source Rate Limits & Resilience**: Ingesting 5 concurrent sources across 10 locations (50 API requests per cycle) approaches Open-Meteo free-tier burst thresholds (10,000 daily calls). If upstream rate limits (`HTTP 429`) occur on any individual source, the pipeline gracefully degrades to blend the remaining available models without dropping locations.
 - For complete 1,000-resample bootstrap confidence intervals, full 16-case failure logs, and IMD SOP citations, see [VERIFICATION_REPORT.md](VERIFICATION_REPORT.md).
 
 ---

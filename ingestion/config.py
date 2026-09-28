@@ -123,6 +123,7 @@ MULTIMODEL_URL = "https://api.open-meteo.com/v1/forecast"
 ECMWF_AIFS_URL = "https://api.open-meteo.com/v1/ecmwf"
 ENSEMBLE_URL = "https://ensemble-api.open-meteo.com/v1/ensemble"
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
+WEATHERNEXT_URL = "https://ensemble-api.open-meteo.com/v1/ensemble"
 
 # Multi-model forecast parameters
 MULTIMODEL_SOURCE_MODELS: List[str] = [
@@ -137,6 +138,7 @@ MODEL_MAP = {
     "icon_seamless": "icon",
     "ecmwf_ifs025": "ecmwf_ifs",
     "ecmwf_aifs025_single": "ecmwf_aifs",
+    "google_weathernext2_ensemble": "weathernext",
 }
 
 # Weather variables requested across models
@@ -154,7 +156,15 @@ AIFS_VARIABLES: List[str] = [
     "wind_speed_10m",
 ]
 
+# Google WeatherNext 2 variables
+WEATHERNEXT_VARIABLES: List[str] = [
+    "temperature_2m",
+    "precipitation",
+    "wind_speed_10m",
+]
+
 # Forecast window settings
 DEFAULT_FORECAST_DAYS = 7
 REQUEST_TIMEOUT_SECONDS = 15
 MAX_RETRIES = 3
+

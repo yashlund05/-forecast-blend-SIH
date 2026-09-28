@@ -23,6 +23,7 @@ from weighting.skill import (
 )
 from weighting.weights import (
     compute_inverse_error_weights,
+    interpolate_weight_grid,
     WeightEngine,
 )
 
@@ -256,3 +257,57 @@ def test_regime_weights_sum_to_one():
             f"Weights do not sum to 1.0 for ({loc}, {season}, {regime}, {lead_b}, {var}): "
             f"sum={weight_sum}"
         )
+
+
+def test_interpolate_weight_grid_smoke():
+    """Smoke test for coarse spatial IDW interpolation of station weights onto national grid.
+    
+    Verifies that interpolate_weight_grid:
+    1. Operates without crashing on known small input (e.g. 3 benchmark points).
+    2. Generates correct 2D output grid shape.
+    3. Produces strictly finite, positive values bounded within the input weight range.
+    4. Accurately reproduces known values at exact station coordinates.
+    """
+    import numpy as np
+
+    known_lats = np.array([19.076, 28.613, 13.082])  # Mumbai, Delhi, Chennai
+    known_lons = np.array([72.877, 77.209, 80.270])
+    known_weights = np.array([0.45, 0.20, 0.35])
+
+    grid_lats, grid_lons, interp_grid = interpolate_weight_grid(
+        station_lats=known_lats,
+        station_lons=known_lons,
+        station_values=known_weights,
+        grid_lat_min=10.0,
+        grid_lat_max=32.0,
+        grid_lon_min=70.0,
+        grid_lon_max=85.0,
+        n_points_lat=10,
+        n_points_lon=10,
+        power=2.0,
+    )
+
+    # Output shape checks
+    assert len(grid_lats) == 10
+    assert len(grid_lons) == 10
+    assert interp_grid.shape == (10, 10)
+
+    # Numerical validity: all points must be finite and within [min, max]
+    assert np.all(np.isfinite(interp_grid)), "Interpolated grid contains NaN or Inf values"
+    assert np.min(interp_grid) >= np.min(known_weights) - 1e-4, "Grid value below min weight"
+    assert np.max(interp_grid) <= np.max(known_weights) + 1e-4, "Grid value above max weight"
+
+    # Exact station coordinate test
+    exact_lats, exact_lons, exact_grid = interpolate_weight_grid(
+        station_lats=known_lats,
+        station_lons=known_lons,
+        station_values=known_weights,
+        grid_lat_min=19.076,
+        grid_lat_max=19.076,
+        grid_lon_min=72.877,
+        grid_lon_max=72.877,
+        n_points_lat=1,
+        n_points_lon=1,
+    )
+    assert exact_grid[0, 0] == pytest.approx(0.45, abs=1e-3)
+
