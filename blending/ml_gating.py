@@ -205,7 +205,14 @@ class RegimeGatedBlendEngine:
         y_naive = (y_gfs + y_icon + y_ifs) / 3.0
 
         # Retrieve actual station-specific calibrated inverse-error weights from SQLite
-        weights_df = self.db.get_model_weights(season="monsoon", variable=variable)
+        # Conditioning on regime="all_regimes" and lead_time_bucket="all" ensures we select
+        # the calibrated aggregate slice rather than unconstrained 100 rows per location.
+        weights_df = self.db.get_model_weights(
+            season="monsoon",
+            regime="all_regimes",
+            lead_time_bucket="all",
+            variable=variable,
+        )
         station_weights: Dict[str, Dict[str, float]] = {}
         if not weights_df.empty:
             for loc, grp in weights_df.groupby("location_id"):

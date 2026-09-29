@@ -215,6 +215,16 @@ def get_system_singletons():
 ) = get_system_singletons()
 
 
+@st.cache_data(show_spinner="Evaluating empirical verification metrics on held-out test split (2024-07-01 to 2024-08-31)...")
+def get_cached_verification_data():
+    return verification_engine.evaluate_test_period()
+
+
+@st.cache_data(show_spinner="Evaluating regime-stratified metrics across test split...")
+def get_cached_regime_data():
+    return verification_engine.evaluate_regime_stratified()
+
+
 # Title and context
 st.markdown(
     '<div class="main-header">🌤️ Hybrid AI–NWP Multi-Model Forecast Blending System</div>',
@@ -926,8 +936,7 @@ with tab_verification:
         unsafe_allow_html=True,
     )
 
-    with st.spinner("Computing verification metrics across test period..."):
-        verif_data = verification_engine.evaluate_test_period()
+    verif_data = get_cached_verification_data()
 
     summary = verif_data["summary"]
     metrics_df = verif_data["metrics_table"]
@@ -1157,9 +1166,9 @@ with tab_verification:
         "value beyond season-level weighting."
     )
 
-    with st.expander("📊 Load Regime-Stratified Breakdown (click to compute — ~20s)", expanded=False):
+    with st.expander("📊 Load Regime-Stratified Breakdown (Instant Cached Evaluation)", expanded=False):
         try:
-            regime_result = verif_engine.evaluate_regime_stratified()
+            regime_result = get_cached_regime_data()
             regime_df = regime_result["regime_df"]
 
             if regime_df.empty:
@@ -1573,7 +1582,7 @@ with tab_extremes:
         return colors.get(val, "")
 
     st.dataframe(
-        sc_df.style.applymap(color_alert, subset=["Alert Level"]),
+        sc_df.style.map(color_alert, subset=["Alert Level"]),
         use_container_width=True,
         hide_index=True,
     )
@@ -1621,7 +1630,7 @@ with tab_extremes:
 
         watch_df = pd.DataFrame(watch_rows)
         st.dataframe(
-            watch_df.style.applymap(color_alert, subset=["IMD Alert Level"]),
+            watch_df.style.map(color_alert, subset=["IMD Alert Level"]),
             use_container_width=True,
             hide_index=True,
         )
