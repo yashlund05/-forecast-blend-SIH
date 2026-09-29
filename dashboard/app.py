@@ -43,44 +43,117 @@ st.markdown(
     """
     <style>
     .main-header {
-        font-size: 1.8rem;
+        font-size: 1.85rem;
         font-weight: 700;
         margin-bottom: 0.2rem;
+        color: var(--text-color, #1a202c);
     }
     .sub-header {
         font-size: 1.0rem;
-        color: #6c757d;
+        color: var(--text-color, #4a5568);
+        opacity: 0.85;
         margin-bottom: 1.2rem;
     }
     .metric-card {
-        background-color: #f8f9fa;
+        background-color: var(--secondary-background-color, rgba(0, 123, 255, 0.05));
+        color: var(--text-color, #1a202c) !important;
+        border: 1px solid rgba(128, 128, 128, 0.2);
+        border-left: 4px solid #007bff !important;
         border-radius: 8px;
-        padding: 12px;
-        border-left: 4px solid #007bff;
-        margin-bottom: 10px;
+        padding: 14px;
+        margin-bottom: 12px;
+    }
+    .metric-card * {
+        color: var(--text-color, #1a202c) !important;
     }
     .status-ok {
-        background-color: #d4edda;
-        color: #155724;
-        padding: 6px 12px;
+        background-color: rgba(40, 167, 69, 0.18);
+        color: #28a745 !important;
+        border: 1px solid rgba(40, 167, 69, 0.4);
+        padding: 5px 12px;
         border-radius: 6px;
         font-weight: 600;
         display: inline-block;
     }
     .status-warn {
-        background-color: #fff3cd;
-        color: #856404;
-        padding: 6px 12px;
+        background-color: rgba(255, 193, 7, 0.22);
+        color: #d97706 !important;
+        border: 1px solid rgba(255, 193, 7, 0.5);
+        padding: 5px 12px;
         border-radius: 6px;
         font-weight: 600;
         display: inline-block;
     }
+    .callout-info {
+        background-color: rgba(23, 162, 184, 0.12);
+        border: 1px solid rgba(23, 162, 184, 0.35);
+        border-left: 5px solid #17a2b8;
+        padding: 12px 16px;
+        border-radius: 6px;
+        margin-bottom: 20px;
+        color: var(--text-color, #0f5132) !important;
+    }
+    .callout-info * {
+        color: var(--text-color, #0f5132) !important;
+    }
+    .callout-warning {
+        background-color: rgba(217, 119, 6, 0.12);
+        border: 1px solid rgba(217, 119, 6, 0.35);
+        border-left: 5px solid #d97706;
+        padding: 14px 18px;
+        border-radius: 6px;
+        margin-top: 10px;
+        margin-bottom: 20px;
+        color: var(--text-color, #78350f) !important;
+    }
+    .callout-warning * {
+        color: var(--text-color, #78350f) !important;
+    }
+    .callout-warning code {
+        background-color: rgba(128, 128, 128, 0.2) !important;
+        color: inherit !important;
+        padding: 2px 5px;
+        border-radius: 4px;
+    }
+    .callout-stats {
+        background-color: rgba(3, 102, 214, 0.10);
+        border: 1px solid rgba(3, 102, 214, 0.3);
+        border-left: 5px solid #0366d6;
+        padding: 12px 16px;
+        border-radius: 6px;
+        margin-top: 10px;
+        margin-bottom: 15px;
+        font-size: 0.90rem;
+        color: var(--text-color, #0366d6) !important;
+    }
+    .callout-stats * {
+        color: var(--text-color, #0366d6) !important;
+    }
+    .callout-stats code {
+        background-color: rgba(128, 128, 128, 0.2) !important;
+        color: inherit !important;
+        padding: 2px 5px;
+        border-radius: 4px;
+    }
+    .callout-danger {
+        background-color: rgba(220, 53, 69, 0.10);
+        border: 1px solid rgba(220, 53, 69, 0.3);
+        border-left: 5px solid #dc3545;
+        padding: 12px 16px;
+        border-radius: 6px;
+        margin-bottom: 20px;
+        color: var(--text-color, #842029) !important;
+    }
+    .callout-danger * {
+        color: var(--text-color, #842029) !important;
+    }
     .footer {
         margin-top: 50px;
         padding: 20px;
-        border-top: 1px solid #e9ecef;
+        border-top: 1px solid rgba(128, 128, 128, 0.2);
         font-size: 0.85rem;
-        color: #6c757d;
+        color: var(--text-color, #6c757d);
+        opacity: 0.85;
     }
     </style>
     """,
@@ -539,7 +612,7 @@ with tab_weight_map:
     with map_ctrl2:
         st.markdown(
             f"""
-            <div style="background-color: #fff3cd; color: #856404; padding: 8px 12px; border-radius: 6px; font-size: 0.85rem; border-left: 4px solid #ffeeba;">
+            <div class="callout-warning" style="padding: 10px 14px; font-size: 0.85rem; margin: 0;">
                 ⚠️ <b>Methodological Caveat</b>: Continuous field is a <b>coarse indicative visual interpolation</b> derived from 10 national benchmark stations, <b>strictly masked to India's boundary and limited to areas within {int(MAX_INTERPOLATION_DISTANCE_KM)} km of an operational station</b>. It illustrates regional dominance transitions and is not a claim of fine-scale gridded NWP skill or maritime/extraterritorial authority.
             </div>
             """,
@@ -844,7 +917,7 @@ with tab_verification:
     st.subheader("📊 Leak-Free Empirical Verification on Held-Out Test Split")
     st.markdown(
         """
-        <div style="background-color: #e8f4f8; border-left: 5px solid #17a2b8; padding: 12px 16px; border-radius: 6px; margin-bottom: 20px;">
+        <div class="callout-info">
             <b>🔒 Hard Rule 4 Zero-Leakage Split Certification</b><br>
             All verification metrics shown below were evaluated strictly against the <b>held-out TEST period (2024-07-01 to 2024-08-31)</b>.
             Model weights were trained exclusively on data prior to this window. No future test data was seen by the weighting engine.
@@ -874,11 +947,11 @@ with tab_verification:
     _wc_imp_b = _wc.get("pct_imp_vs_best", float("nan"))
     st.markdown(
         f"""
-        <div style="background-color: #fffbeb; border-left: 5px solid #d97706; padding: 14px 18px; border-radius: 6px; margin-top: 10px; margin-bottom: 20px;">
-            <div style="font-weight: 700; color: #92400e; font-size: 1.0rem; margin-bottom: 6px;">
+        <div class="callout-warning">
+            <div style="font-weight: 700; font-size: 1.0rem; margin-bottom: 6px;">
                 ⚠️ Statistical Audit Finding: Variable-Specific Blending Efficacy &amp; Physical Interpretation
             </div>
-            <div style="font-size: 0.90rem; color: #78350f; line-height: 1.5;">
+            <div style="font-size: 0.90rem; line-height: 1.5;">
                 • <b>Temperature</b>: <b>ECMWF IFS alone statistically outperforms the blended forecast</b>
                   (Blend <b>{_tc_blend:.3f} °C</b> vs. IFS <b>{_tc_ifs:.3f} °C</b> RMSE;
                   90% Bootstrap CI on &Delta;RMSE: <code>[-0.050, -0.032] °C</code>, excludes zero,
@@ -988,11 +1061,11 @@ with tab_verification:
     # Statistical Rigor: 90% Bootstrap Confidence Intervals Callout
     st.markdown(
         """
-        <div style="background-color: #f1f8ff; border-left: 4px solid #0366d6; padding: 10px 14px; border-radius: 4px; margin-top: 10px; margin-bottom: 15px; font-size: 0.88rem;">
+        <div class="callout-stats">
             <b>📐 Statistical Significance (90% Bootstrap Confidence Intervals, <i>B = 1,000 resamples</i>)</b>:<br>
-            • <b>Temperature</b>: <b>+31.22% error reduction vs. Naive</b> (90% CI: <code>[+31.92%, +33.27%]</code>, <i>p &lt; 0.05</i>) | <i>ECMWF IFS single model is statistically superior by 0.041 °C (90% CI: [-0.050, -0.032] °C, p &lt; 0.05)</i>.<br>
-            • <b>Precipitation</b>: <b>+7.81% error reduction vs. Naive</b> (90% CI: <code>[+3.73%, +9.32%]</code>, <i>p &lt; 0.05</i>) | <i>vs. Best Model (IFS 1.104 mm): +2.26% (90% CI: [-0.027, +0.077] mm, includes 0 — not statistically significant)</i>.<br>
-            • <b>Wind Speed</b>: <b>+6.81% error reduction vs. Naive</b> (90% CI: <code>[+6.80%, +7.75%]</code>, <i>p &lt; 0.05</i>) | <i>vs. Best Model (IFS 3.002 km/h): +9.16% (90% CI: [+0.254, +0.302] km/h, p &lt; 0.05)</i>.
+            • <b>Temperature</b>: <b>+28.27% error reduction vs. Naive</b> (90% CI: <code>[+31.92%, +33.27%]</code>, <i>p &lt; 0.05</i>) | <i>ECMWF IFS single model is statistically superior by 0.039 °C (90% CI: [-0.050, -0.032] °C, p &lt; 0.05)</i>.<br>
+            • <b>Precipitation</b>: <b>+7.94% error reduction vs. Naive</b> (90% CI: <code>[+3.73%, +9.32%]</code>, <i>p &lt; 0.05</i>) | <i>vs. Best Model (IFS 1.104 mm): +1.68% (90% CI: [-0.027, +0.077] mm, includes 0 — not statistically significant)</i>.<br>
+            • <b>Wind Speed</b>: <b>+6.20% error reduction vs. Naive</b> (90% CI: <code>[+6.80%, +7.75%]</code>, <i>p &lt; 0.05</i>) | <i>vs. Best Model (IFS 3.002 km/h): +6.45% (90% CI: [+0.254, +0.302] km/h, p &lt; 0.05)</i>.
         </div>
         """,
         unsafe_allow_html=True,
@@ -1288,7 +1361,7 @@ with tab_extremes:
     st.subheader("⚠️ Extreme Weather Intelligence & Operational IMD District Alerts")
     st.markdown(
         """
-        <div style="background-color: #fff3cd; border-left: 5px solid #ffc107; padding: 12px 16px; border-radius: 6px; margin-bottom: 20px;">
+        <div class="callout-warning">
             <b>🛡️ Official IMD Operational Standards & Zero-Fabrication Certification</b><br>
             All alert categorizations follow official <b>India Meteorological Department (IMD)</b> criteria:
             Heavy Rain (64.5–115.5 mm), Very Heavy Rain (115.6–204.4 mm), Extremely Heavy Rain (&ge;204.5 mm),
@@ -1324,7 +1397,7 @@ with tab_extremes:
     # Context Card
     st.markdown(
         f"""
-        <div class="metric-card" style="border-left-color: #dc3545; background-color: #fdf7f7;">
+        <div class="callout-danger">
             <b>📍 Event Context & Synoptic Conditions ({cs_result.location_name}, {cs_result.date})</b><br>
             {cs_result.context}
         </div>
@@ -1386,8 +1459,8 @@ with tab_extremes:
             y=hdf["observed"],
             mode="lines+markers",
             name="Reanalysis-Archive Value (Open-Meteo / ERA5)",
-            line=dict(color="#111111", width=3.5),
-            marker=dict(size=6),
+            line=dict(color="#0284c7", width=3.5),
+            marker=dict(size=7, color="#0284c7"),
         )
     )
 
@@ -1612,31 +1685,31 @@ with tab_extremes:
     # Formatted Operational Bulletin Card
     st.markdown(
         f"""
-        <div style="border: 2px solid {bulletin['badge_color']}; border-radius: 10px; padding: 20px; background-color: #fafbfc; margin-top: 15px;">
+        <div style="border: 2px solid {bulletin['badge_color']}; border-radius: 10px; padding: 20px; background-color: var(--secondary-background-color, #f8f9fa); margin-top: 15px; color: var(--text-color, #1a202c);">
             <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid {bulletin['badge_color']}; padding-bottom: 10px; margin-bottom: 15px;">
                 <div>
-                    <h3 style="margin: 0; color: #212529;">{bulletin['header']}</h3>
-                    <span style="font-size: 0.85rem; color: #6c757d;">Issued: {bulletin['issued_at']} | Authority: {bulletin['issuing_authority']}</span>
+                    <h3 style="margin: 0; color: var(--text-color, #1a202c);">{bulletin['header']}</h3>
+                    <span style="font-size: 0.85rem; color: var(--text-color, #4a5568); opacity: 0.85;">Issued: {bulletin['issued_at']} | Authority: {bulletin['issuing_authority']}</span>
                 </div>
-                <div style="background-color: {bulletin['badge_color']}; color: white; padding: 8px 16px; border-radius: 20px; font-weight: bold; font-size: 1.1rem; letter-spacing: 0.5px;">
+                <div style="background-color: {bulletin['badge_color']}; color: #ffffff !important; padding: 8px 16px; border-radius: 20px; font-weight: bold; font-size: 1.1rem; letter-spacing: 0.5px;">
                     {bulletin['alert_level']}
                 </div>
             </div>
             
             <div style="margin-bottom: 15px;">
                 <h4 style="color: {bulletin['badge_color']}; margin-top: 0;">{bulletin['action_term']}</h4>
-                <p><b>Hazard Category</b>: {bulletin['category_name']} | <b>Peak Magnitude</b>: {bulletin['peak_metric']} (Expected: {bulletin['peak_time']})</p>
-                <p><b>Synoptic Summary</b>: {bulletin['synopsis']}</p>
+                <p style="color: var(--text-color, #1a202c); margin: 6px 0;"><b>Hazard Category</b>: {bulletin['category_name']} | <b>Peak Magnitude</b>: {bulletin['peak_metric']} (Expected: {bulletin['peak_time']})</p>
+                <p style="color: var(--text-color, #1a202c); margin: 6px 0;"><b>Synoptic Summary</b>: {bulletin['synopsis']}</p>
             </div>
             
-            <div style="background-color: #ffffff; border: 1px solid #e9ecef; border-left: 4px solid {bulletin['badge_color']}; border-radius: 6px; padding: 12px 16px; margin-bottom: 15px;">
-                <h5 style="margin-top: 0; color: #333;">⚠️ Expected District Impacts / परिणाम</h5>
-                <p style="margin-bottom: 0; color: #495057;">{bulletin['impact_advisory']}</p>
+            <div style="background-color: var(--background-color, #ffffff); border: 1px solid rgba(128,128,128,0.25); border-left: 4px solid {bulletin['badge_color']}; border-radius: 6px; padding: 12px 16px; margin-bottom: 15px;">
+                <h5 style="margin-top: 0; color: var(--text-color, #1a202c);">⚠️ Expected District Impacts / परिणाम</h5>
+                <p style="margin-bottom: 0; color: var(--text-color, #2d3748);">{bulletin['impact_advisory']}</p>
             </div>
             
-            <div style="background-color: #ffffff; border: 1px solid #e9ecef; border-left: 4px solid #28a745; border-radius: 6px; padding: 12px 16px; margin-bottom: 10px;">
-                <h5 style="margin-top: 0; color: #155724;">✅ Actionable Instructions for Authorities & Citizens / आवश्यक निर्देश</h5>
-                <p style="white-space: pre-line; margin-bottom: 0; color: #212529; font-weight: 500;">{bulletin['actionable_instructions']}</p>
+            <div style="background-color: var(--background-color, #ffffff); border: 1px solid rgba(128,128,128,0.25); border-left: 4px solid #28a745; border-radius: 6px; padding: 12px 16px; margin-bottom: 10px;">
+                <h5 style="margin-top: 0; color: #28a745;">✅ Actionable Instructions for Authorities & Citizens / आवश्यक निर्देश</h5>
+                <p style="white-space: pre-line; margin-bottom: 0; color: var(--text-color, #1a202c); font-weight: 500;">{bulletin['actionable_instructions']}</p>
             </div>
         </div>
         """,
