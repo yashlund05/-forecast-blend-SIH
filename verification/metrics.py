@@ -211,8 +211,18 @@ class VerificationEngine:
             # Pivot to wide format by target_time so we have columns for each model
             pivot_times = sorted(merged["target_time"].unique())
             
-            # Query learned weights from SQLite for monsoon
-            learned_weights_df = self.db.get_model_weights(location_id=loc_id, season="monsoon")
+            # Query learned weights from SQLite for the monsoon / all-regimes / all-lead-times
+            # aggregate slice.  Must be specific: passing no regime/lead_time_bucket returns
+            # ALL 100 rows (5 models × 4 regimes × 5 buckets) per variable, and
+            # dict(zip(...)) overwrites iteratively — last row wins (uncalibrated 0.2000).
+            # regime="all_regimes" + lead_time_bucket="all" is the pre-computed aggregate
+            # that was actually calibrated against the full historical archive.
+            learned_weights_df = self.db.get_model_weights(
+                location_id=loc_id,
+                season="monsoon",
+                regime="all_regimes",
+                lead_time_bucket="all",
+            )
             weights_by_var: Dict[str, Dict[str, float]] = {}
             if not learned_weights_df.empty:
                 for var, grp in learned_weights_df.groupby("variable"):

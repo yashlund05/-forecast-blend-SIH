@@ -439,6 +439,34 @@ class DatabaseManager:
             query += " ORDER BY time"
             return pd.read_sql_query(query, conn, params=params)
 
+    def get_latest_observations(
+        self,
+        location_id: str,
+        hours: int = 72,
+    ) -> pd.DataFrame:
+        """Retrieve the most recent observations for a location.
+
+        Used by the live blend in Tab 1 to supply obs_df for real-time regime
+        detection.  Fetches the last ``hours`` hours from historical_observations.
+
+        Args:
+            location_id: Station identifier (e.g. 'mumbai').
+            hours: Rolling look-back window in hours (default 72).
+
+        Returns:
+            DataFrame with columns time, location_id, temperature_2m,
+            precipitation, wind_speed_10m, ordered by time ascending.
+        """
+        with self.get_connection() as conn:
+            query = (
+                "SELECT * FROM historical_observations "
+                "WHERE location_id = ? "
+                "AND time >= datetime('now', ?) "
+                "ORDER BY time"
+            )
+            interval = f"-{hours} hours"
+            return pd.read_sql_query(query, conn, params=[location_id, interval])
+
     def get_pipeline_history(self, limit: int = 10) -> pd.DataFrame:
         """Retrieve recent pipeline execution logs."""
         with self.get_connection() as conn:
@@ -569,5 +597,24 @@ class DatabaseManager:
                 query += " AND variable = ?"
                 params.append(variable)
             query += " ORDER BY location_id, season, regime, variable, model"
-            return pd.read_sql_query(query, conn, params=params)
+            result = pd.read_sql_query(query, conn, params=params)
+
+        # Guard: if caller requested a specific regime/lead_time_bucket slice but got
+        # nothing, emit a loud WARNING — a silent empty return causes callers to fall
+        # back to equal weights (0.2/model), making rmse_blend == rmse_naive and
+        # invalidating all verification skill numbers.  (AGENTS.md Hard Rule 1)
+        if result.empty and (regime is not None or lead_time_bucket is not None):
+            logger.warning(
+                "get_model_weights returned EMPTY DataFrame for specific filter "
+                "(location_id=%r, season=%r, regime=%r, lead_time_bucket=%r). "
+                "Callers MUST NOT silently fall back to equal weights — "
+                "ensure WeightEngine.generate_and_save_weights() has been run "
+                "and has populated the model_weights table.",
+                location_id,
+                season,
+                regime,
+                lead_time_bucket,
+            )
+
+        return result
 

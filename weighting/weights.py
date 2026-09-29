@@ -6,7 +6,9 @@ and SQLite persistence.
 """
 
 from datetime import datetime, timezone
+import json
 import logging
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 import numpy as np
 import pandas as pd
@@ -390,5 +392,159 @@ def interpolate_weight_grid(
     interp_grid = np.sum(idw_weights * vals[None, None, :], axis=-1) / np.squeeze(total_weights, axis=-1)
 
     return grid_lats, grid_lons, interp_grid
+
+
+# Named constant for geographic cutoff
+# Stations spaced across India have regional representation up to ~500 km.
+# Beyond 500 km, IDW extrapolation is ungrounded even within Indian borders,
+# so cells exceeding this threshold are masked out to prevent misleading claims.
+MAX_INTERPOLATION_DISTANCE_KM: float = 500.0
+
+
+def _point_in_multipolygon(
+    lons: np.ndarray,
+    lats: np.ndarray,
+    polygons: List[List[List[float]]],
+) -> np.ndarray:
+    """Vectorized ray-casting algorithm to test whether (lon, lat) points lie inside a MultiPolygon.
+
+    Args:
+        lons: 1D array of longitude coordinates.
+        lats: 1D array of latitude coordinates.
+        polygons: List of polygon rings, each ring being a list of [lon, lat] coordinates.
+
+    Returns:
+        Boolean 1D array indicating whether each point is inside any polygon ring.
+    """
+    inside = np.zeros(len(lons), dtype=bool)
+    x = lons
+    y = lats
+
+    for poly_coords in polygons:
+        poly_arr = np.asarray(poly_coords, dtype=float)
+        n = len(poly_arr)
+        if n < 3:
+            continue
+        poly_inside = np.zeros(len(x), dtype=bool)
+        p1x, p1y = poly_arr[0]
+        for i in range(1, n + 1):
+            p2x, p2y = poly_arr[i % n]
+            # Edge crossing condition
+            mask = (y > min(p1y, p2y)) & (y <= max(p1y, p2y)) & (x <= max(p1x, p2x))
+            if np.any(mask):
+                xinters = (y[mask] - p1y) * (p2x - p1x) / (p2y - p1y + 1e-12) + p1x
+                cross = x[mask] <= xinters
+                poly_inside[mask] = poly_inside[mask] ^ cross
+            p1x, p1y = p2x, p2y
+        inside = inside | poly_inside
+
+    return inside
+
+
+def _haversine_distance_km(
+    lat1: np.ndarray,
+    lon1: np.ndarray,
+    lat2: float,
+    lon2: float,
+) -> np.ndarray:
+    """Computes great-circle distances in kilometers between an array of points and a reference coordinate."""
+    R = 6371.0  # Earth mean radius in kilometers
+    phi1 = np.radians(lat1)
+    phi2 = np.radians(lat2)
+    delta_phi = np.radians(lat2 - lat1)
+    delta_lambda = np.radians(lon2 - lon1)
+    a = (
+        np.sin(delta_phi / 2.0) ** 2
+        + np.cos(phi1) * np.cos(phi2) * (np.sin(delta_lambda / 2.0) ** 2)
+    )
+    return 2.0 * R * np.arcsin(np.clip(np.sqrt(a), 0.0, 1.0))
+
+
+def mask_grid_to_india(
+    grid_lats: np.ndarray,
+    grid_lons: np.ndarray,
+    interp_grid: np.ndarray,
+    station_lats: np.ndarray,
+    station_lons: np.ndarray,
+    geojson_path: Optional[str] = None,
+    max_distance_km: float = MAX_INTERPOLATION_DISTANCE_KM,
+) -> np.ndarray:
+    """Masks IDW grid cells that lie outside India's sovereign boundaries or beyond station influence.
+
+    Scope & Design Rationale:
+    1. Border Clipping: An unmasked bounding box (8°-36°N, 68°-96°E) paints skill over the
+       Arabian Sea, Bay of Bengal, Pakistan, Nepal, and China. Using the verified Natural Earth
+       administrative boundary (committed as data/india_boundary.geojson) masks foreign territories
+       and ocean cells without adding heavy GIS binary dependencies.
+    2. Station Proximity Filter: Even within India, cells farther than max_distance_km
+       (default 500 km) from any observation/forecast station have no physical or empirical
+       justification for IDW weighting and are masked with NaN.
+
+    Args:
+        grid_lats: 1D array of latitude coordinates from interpolate_weight_grid.
+        grid_lons: 1D array of longitude coordinates from interpolate_weight_grid.
+        interp_grid: 2D array of interpolated values (shape: [n_points_lat, n_points_lon]).
+        station_lats: 1D array of station latitude coordinates.
+        station_lons: 1D array of station longitude coordinates.
+        geojson_path: Optional path to GeoJSON file. Defaults to data/india_boundary.geojson.
+        max_distance_km: Maximum allowable distance from the nearest station in km.
+
+    Returns:
+        2D masked array of same shape as interp_grid, with invalid cells set to np.nan.
+    """
+    if geojson_path is None:
+        geojson_path = str(Path(__file__).resolve().parent.parent / "data" / "india_boundary.geojson")
+
+    path_obj = Path(geojson_path)
+    if not path_obj.exists():
+        logger.warning(f"GeoJSON boundary file {geojson_path} not found; returning unmasked grid.")
+        return interp_grid.copy()
+
+    with open(path_obj, "r", encoding="utf-8") as f:
+        data = json.load(f)
+
+    # Extract all coordinate polygon rings from FeatureCollection or Geometry
+    polygons: List[List[List[float]]] = []
+    features = data.get("features", [])
+    for feat in features:
+        geom = feat.get("geometry", {})
+        gtype = geom.get("type")
+        coords = geom.get("coordinates", [])
+        if gtype == "Polygon":
+            if coords:
+                polygons.append(coords[0])
+        elif gtype == "MultiPolygon":
+            for poly in coords:
+                if poly:
+                    polygons.append(poly[0])
+
+    mesh_lons, mesh_lats = np.meshgrid(grid_lons, grid_lats)
+    flat_lats = mesh_lats.flatten()
+    flat_lons = mesh_lons.flatten()
+
+    # 1. Point-in-polygon check for India boundary
+    inside_india = _point_in_multipolygon(flat_lons, flat_lats, polygons)
+
+    # 2. Distance check to nearest station
+    stn_lats = np.asarray(station_lats, dtype=float)
+    stn_lons = np.asarray(station_lons, dtype=float)
+
+    if len(stn_lats) > 0:
+        dists_km = np.empty((len(flat_lats), len(stn_lats)), dtype=float)
+        for j in range(len(stn_lats)):
+            dists_km[:, j] = _haversine_distance_km(flat_lats, flat_lons, stn_lats[j], stn_lons[j])
+        min_dist_to_station = np.min(dists_km, axis=1)
+        valid_distance = min_dist_to_station <= max_distance_km
+    else:
+        valid_distance = np.ones(len(flat_lats), dtype=bool)
+
+    # Valid mask combines sovereign territory and station proximity
+    valid_cells = inside_india & valid_distance
+
+    masked_flat = interp_grid.flatten().copy()
+    masked_flat[~valid_cells] = np.nan
+
+    return masked_flat.reshape(interp_grid.shape)
+
 
 

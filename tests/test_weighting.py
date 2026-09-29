@@ -24,6 +24,8 @@ from weighting.skill import (
 from weighting.weights import (
     compute_inverse_error_weights,
     interpolate_weight_grid,
+    mask_grid_to_india,
+    MAX_INTERPOLATION_DISTANCE_KM,
     WeightEngine,
 )
 
@@ -310,4 +312,103 @@ def test_interpolate_weight_grid_smoke():
         n_points_lon=1,
     )
     assert exact_grid[0, 0] == pytest.approx(0.45, abs=1e-3)
+
+
+def test_mask_grid_to_india_known_locations():
+    """Verify that points outside India are masked out while points inside India are preserved.
+
+    Requirement:
+    - Known point outside India (e.g. Mid Arabian Sea at 15.0°N, 65.0°E) must be masked to NaN.
+    - Known point outside India (e.g. Bay of Bengal at 15.0°N, 88.0°E) must be masked to NaN.
+    - Known point inside India (e.g. Nagpur at 21.1458°N, 79.0882°E) must be kept valid.
+    """
+    import numpy as np
+
+    # Benchmark test points: Nagpur (inside), Arabian Sea (outside), Bay of Bengal (outside)
+    # Using dummy stations near Nagpur so proximity filter is satisfied for Nagpur
+    station_lats = np.array([21.1458, 19.0760])  # Nagpur, Mumbai
+    station_lons = np.array([79.0882, 72.8777])
+
+    # 1. Test point inside India: Nagpur (21.1458, 79.0882)
+    grid_lats_in = np.array([21.1458])
+    grid_lons_in = np.array([79.0882])
+    interp_in = np.array([[0.40]])
+
+    masked_in = mask_grid_to_india(
+        grid_lats=grid_lats_in,
+        grid_lons=grid_lons_in,
+        interp_grid=interp_in,
+        station_lats=station_lats,
+        station_lons=station_lons,
+        max_distance_km=500.0,
+    )
+    assert not np.isnan(masked_in[0, 0]), "Expected Nagpur (inside India) to be preserved, but was masked out."
+    assert masked_in[0, 0] == pytest.approx(0.40)
+
+    # 2. Test point outside India: Mid Arabian Sea (15.0°N, 65.0°E)
+    grid_lats_sea = np.array([15.0])
+    grid_lons_sea = np.array([65.0])
+    interp_sea = np.array([[0.35]])
+
+    masked_sea = mask_grid_to_india(
+        grid_lats=grid_lats_sea,
+        grid_lons=grid_lons_sea,
+        interp_grid=interp_sea,
+        station_lats=station_lats,
+        station_lons=station_lons,
+        max_distance_km=2000.0,  # Even with infinite distance allowance, sovereign mask must discard
+    )
+    assert np.isnan(masked_sea[0, 0]), "Expected Arabian Sea (outside India) to be masked to NaN."
+
+    # 3. Test point outside India: Central Bay of Bengal (15.0°N, 88.0°E)
+    grid_lats_bob = np.array([15.0])
+    grid_lons_bob = np.array([88.0])
+    interp_bob = np.array([[0.50]])
+
+    masked_bob = mask_grid_to_india(
+        grid_lats=grid_lats_bob,
+        grid_lons=grid_lons_bob,
+        interp_grid=interp_bob,
+        station_lats=station_lats,
+        station_lons=station_lons,
+        max_distance_km=2000.0,
+    )
+    assert np.isnan(masked_bob[0, 0]), "Expected Bay of Bengal (outside India) to be masked to NaN."
+
+
+def test_mask_grid_to_india_distance_cutoff():
+    """Verify that cells exceeding MAX_INTERPOLATION_DISTANCE_KM are masked even if inside India."""
+    import numpy as np
+
+    # Place a single station at Thiruvananthapuram (southern tip: 8.52°N, 76.94°E)
+    # Test a point at Delhi (28.61°N, 77.21°E, inside India, ~2200 km away)
+    station_lats = np.array([8.5241])
+    station_lons = np.array([76.9366])
+
+    grid_lats = np.array([28.6139])  # Delhi
+    grid_lons = np.array([77.2090])
+    interp = np.array([[0.33]])
+
+    # With 500 km cutoff, Delhi should be masked out because nearest station is > 2000 km away
+    masked = mask_grid_to_india(
+        grid_lats=grid_lats,
+        grid_lons=grid_lons,
+        interp_grid=interp,
+        station_lats=station_lats,
+        station_lons=station_lons,
+        max_distance_km=500.0,
+    )
+    assert np.isnan(masked[0, 0]), "Expected remote cell > 500 km from station to be masked to NaN."
+
+    # With 3000 km cutoff, Delhi should be kept because it is inside India
+    kept = mask_grid_to_india(
+        grid_lats=grid_lats,
+        grid_lons=grid_lons,
+        interp_grid=interp,
+        station_lats=station_lats,
+        station_lons=station_lons,
+        max_distance_km=3000.0,
+    )
+    assert not np.isnan(kept[0, 0]), "Expected cell within extended cutoff to be preserved inside India."
+
 

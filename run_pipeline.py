@@ -95,6 +95,18 @@ def main() -> None:
         default=None,
         help="End date (YYYY-MM-DD) for historical archive ingestion.",
     )
+    parser.add_argument(
+        "--ground-truth-source",
+        type=str,
+        choices=["open-meteo-archive"],
+        default="open-meteo-archive",
+        help=(
+            "Ground-truth source used for verification comparisons. "
+            "Currently only 'open-meteo-archive' (ERA5-backed reanalysis via Open-Meteo) "
+            "is supported. 'imdaa' requires institutional NCMRWF/TDS credentials and is "
+            "not yet implemented — see README.md NCMRWF section for the access process."
+        ),
+    )
 
     args = parser.parse_args()
 

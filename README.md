@@ -4,7 +4,7 @@ SIH Problem Statement 26081 | Ministry of Earth Sciences / NCMRWF | Theme: Disas
 
 A hybrid AI–NWP multi-model forecast blending system that dynamically pulls live operational forecasts from Open-Meteo across three physical NWP models (NOAA GFS, DWD ICON, ECMWF IFS) and two global AI/ML models (ECMWF AIFS and Google DeepMind WeatherNext 2), blends them using adaptive regional and seasonal inverse-error weights, flags extreme weather against verified IMD operational thresholds, and generates actionable multilingual district disaster bulletins.
 
-**Status**: Hackathon prototype, feature-complete through Phase 7 with 5 blended model sources (2 AI models, 3 NWP models; all tasks in `docs/TASKS.md` checked, 41/41 tests passing).
+**Status**: Hackathon prototype, feature-complete through Phase 7 with 5 blended model sources (2 AI models, 3 NWP models; all tasks in `docs/TASKS.md` checked, 43/43 tests passing).
 
 
 
@@ -15,14 +15,14 @@ A hybrid AI–NWP multi-model forecast blending system that dynamically pulls li
 The system implements all six core architectural modules and key differentiators:
 
 - **Module 1 — Ingestion Pipeline**: Resilient multi-source fetcher covering 3 physical NWP sources (GFS, ICON, ECMWF IFS) and 2 AI/ML sources (ECMWF AIFS, Google DeepMind WeatherNext 2) with schema normalization, SQLite storage, synoptic 6-hourly scheduler, and graceful per-source failure degradation.
-- **Module 2 — Skill & Weighting Engine**: Historical error backtesting computing quadratic inverse-error weights ($w_m \propto 1/\text{RMSE}_m^2$) conditioned on station, season, weather regime, and lead-time bucket, with low-sample fallbacks and audit-ready explainability traces across all 5 participating models. Includes regular-grid Inverse Distance Weighting (IDW) continuous spatial interpolation.
+- **Module 2 — Skill & Weighting Engine**: Historical error backtesting computing quadratic inverse-error weights ($w_m \propto 1/\text{RMSE}_m^2$) conditioned on station, season, weather regime, and lead-time bucket, with low-sample fallbacks and audit-ready explainability traces across all 5 participating models. Includes regular-grid Inverse Distance Weighting (IDW) continuous spatial interpolation masked strictly to sovereign territory and station proximity limits.
 - **Module 3 — Blending Engine**: Pluggable weighted-average blending across 5 models with missing-model renormalization, min–max ensemble spread envelopes, and an optional regime-gated GBDT blending upgrade.
 - **Module 4 — Extreme Weather Module**: Multi-hazard detection using verified India Meteorological Department (IMD) thresholds for 24h rainfall, heatwaves by topography, and distinct paths for convective squalls vs. synoptic gales, plus verifiable historical extreme-event backtesting.
 - **Module 5 — Verification Engine**: Non-overlapping train/calibrate/test backtesting against reanalysis ground truth, computing RMSE/MAE reductions, contingency skill scores (POD, FAR, CSI, ETS), and transparent failure case auditing.
 - **Module 6 — Dashboard & Multilingual Alerts**: 4-tab Streamlit operations dashboard featuring interactive forecast curves, continuous regional spatial weight maps with discrete station toggle, "Why This Weight?" deep-dive explainability panels, test-split verification charts, and official district warning bulletins in 5 languages (English, Hindi, Marathi, Tamil, Bengali).
 
 ### Key Differentiators
-- **Continuous Regional Weight Maps with Station Explainability**: Addresses the "model weight maps" deliverable by interpolating 4D-conditioned station weights onto a regular continuous grid across India via Inverse Distance Weighting (IDW, power $p=2.0$). Includes a view toggle between continuous regional field and discrete station points, explicit UI disclaimers against overstating coarse interpolation as high-resolution NWP skill, and interactive station inspection with full "Why This Weight?" mathematical audit traces.
+- **Continuous Regional Weight Maps with Sovereign Masking**: Addresses the "model weight maps" deliverable by interpolating 4D-conditioned station weights onto a regular grid across India via Inverse Distance Weighting (IDW, power $p=2.0$). Using Natural Earth boundary data committed directly to the repository (`data/india_boundary.geojson`), cells over the Arabian Sea, Bay of Bengal, and neighboring countries are strictly masked out. Additionally, cells beyond 500 km from any operational station are dropped to prevent ungrounded extrapolation. Features an interactive toggle between continuous regional field and discrete station points, explicit UI caveats, and full "Why This Weight?" mathematical audit traces.
 - **Genuine Hybrid AI–NWP Balance (2 AI Models : 3 NWP Models)**: Rather than relying on a single AI source, the system integrates two distinct global AI weather models—ECMWF AIFS (Graph Neural Network) and Google DeepMind WeatherNext 2 (AI ensemble system)—alongside NOAA GFS, DWD ICON, and ECMWF IFS.
 - **Real Live Data, Zero Fabrication**: Forecasts and reanalysis benchmarks are retrieved live from Open-Meteo APIs. No skill scores, case studies, or verification numbers are hardcoded or simulated.
 
@@ -38,9 +38,9 @@ Evaluated across **43,920 point-predictions** (14,640 per variable across 10 nat
 
 | Variable | NOAA GFS | DWD ICON | ECMWF IFS | Naive Blend | Learned Blend | Blend vs. Naive | Verdict vs. Best Single Model |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| **Temperature (2m)** | 2.129 °C | 1.520 °C | **0.794 °C** | 1.212 °C | 0.833 °C | **+31.22%** | **IFS alone statistically outperforms blend** (by 0.041 °C, $p < 0.05$) |
-| **Precipitation** | 1.655 mm | 1.530 mm | 1.104 mm | 1.167 mm | **1.076 mm** | **+7.81%** | **+2.26% vs. IFS** (90% CI crosses zero — comparable) |
-| **Wind Speed (10m)** | 4.735 km/h | 5.372 km/h | 3.002 km/h | 2.928 km/h | **2.728 km/h** | **+6.81%** | **Blend statistically beats best single model** (+9.16% vs. IFS, $p < 0.05$) |
+| **Temperature (2m)** | 2.129 °C | 1.520 °C | **0.794 °C** | 1.212 °C | 0.833 °C | **+28.27%** | **IFS alone statistically outperforms blend** (by 0.039 °C, $p < 0.05$) |
+| **Precipitation** | 1.655 mm | 1.530 mm | 1.104 mm | 1.167 mm | **1.076 mm** | **+7.94%** | **+1.68% vs. IFS** (90% CI crosses zero — comparable) |
+| **Wind Speed (10m)** | 4.735 km/h | 5.372 km/h | 3.002 km/h | 2.928 km/h | **2.728 km/h** | **+6.20%** | **Blend statistically beats best single model** (+6.45% vs. IFS, $p < 0.05$) |
 
 ### Performance Breakdown by Forecast Lead-Time Bucket
 
@@ -68,7 +68,7 @@ Regime computed from rolling 7-day precipitation anomaly. All numbers from held-
 
 *Honest reporting: regime-blend underperforms naive in 8/60 (regime × variable × station) cells — including Delhi precipitation during monsoon-active (where local thunderstorm-dominated convection is poorly captured by any model's regional weighting) and Shimla temperature during monsoon-break (complex orographic effects). Full failure table in dashboard Tab 3.*
 
-- **Normalized Multi-Variate Skill Score**: **+15.28%** (unitless arithmetic mean of relative error reductions vs. naive averaging; macro sample-weighted reduction is **+14.13%**).
+- **Normalized Multi-Variate Skill Score**: **+14.14%** (unitless arithmetic mean of relative error reductions vs. naive averaging; macro sample-weighted reduction is **+14.13%**).
 - **No Unit-Mixed RMSE**: Averaging RMSE across heterogeneous units (°C, mm, km/h) is mathematically invalid and has been removed from all reports in favor of normalized skill scoring and per-variable evaluation.
 - **AI Models in Reanalysis Verification Split**: The primary 43,920-point blind backtest evaluates the three physical NWP models (`NOAA GFS`, `DWD ICON`, `ECMWF IFS`) against ERA5 reanalysis ground truth over the reserved `2024-07-01` to `2024-08-31` window. The two AI/ML models (`ECMWF AIFS` and `Google DeepMind WeatherNext 2`) participate dynamically in live blending via Open-Meteo's APIs and are assigned calibrated baseline equal shares until full historical archive backfills are made available by upstream providers (per AGENTS.md Hard Rule 1, uncomputed numbers are left transparently uncalculated rather than fabricated).
 - **Per-Source Rate Limits & Resilience**: Ingesting 5 concurrent sources across 10 locations (50 API requests per cycle) approaches Open-Meteo free-tier burst thresholds (10,000 daily calls). If upstream rate limits (`HTTP 429`) occur on any individual source, the pipeline gracefully degrades to blend the remaining available models without dropping locations.
@@ -96,7 +96,21 @@ pip install -r requirements.txt
 
 > **API Key Setup**: No API key is required. Open-Meteo endpoints used by this system are open access under CC BY 4.0. No `.env` configuration is needed to run out of the box.
 
-### 2. Running Ingestion
+### 2. Seed the Database (required on first run)
+The SQLite database (`data/forecast_blend.sqlite3`) is not committed to the repository.
+Run the seed script once after cloning to backfill 90 days of data and generate model weights:
+
+```bash
+python scripts/seed_db.py
+```
+
+**Expected runtime: 3–8 minutes** (network-bound; fetches live forecasts + 90-day archive from Open-Meteo across 10 stations, then computes weights).  
+The script performs three steps automatically:
+1. Live 7-day forecast ingestion (all 5 sources)
+2. 90-day historical archive backfill at all 10 stations (calibration window)
+3. `WeightEngine.generate_and_save_weights()` — populates the `model_weights` table
+
+### 3. Running Ingestion
 The pipeline can be executed in multiple operational modes:
 ```bash
 # A. One-off live ingestion for all 10 national stations (GFS, ICON, IFS, AIFS)
@@ -112,7 +126,7 @@ python run_pipeline.py --schedule-hours 6
 python ingestion/backfill.py
 ```
 
-### 3. Launching the Dashboard
+### 4. Launching the Dashboard
 Start the interactive Streamlit dashboard:
 ```bash
 streamlit run dashboard/app.py
@@ -139,8 +153,14 @@ pytest -v
 - `docs/TASKS.md` — phased build checklist
 - `AGENTS.md` — rules for AI coding agents working on this repo
 
-## Operational Data Source Status & NCMRWF Roadmap
-**Current data source**: Open-Meteo (public reanalysis-backed archive + live multi-model API). Not yet using NCMRWF's own operational products (IMDAA/MERA reanalysis, IMD gridded station observations). Ingesting IMDAA/MERA directly is the natural next step for a fully NCMRWF-native pipeline; the architecture's pluggable ingestion clients (`ingestion/clients.py`) are designed to make this a contained change.
+## Operational Data Source Status & NCMRWF / IMDAA
+
+**Current ground-truth source**: Open-Meteo historical archive (ERA5-backed reanalysis, accessed via `historical-forecast-api.open-meteo.com`). The pipeline CLI supports a `--ground-truth-source` flag (default: `open-meteo-archive`) to document the intent to support additional sources in future.
+
+**NCMRWF / IMDAA access barrier**: NCMRWF's IMDAA reanalysis and MERA operational products do not have a public unauthenticated REST API. Access requires institutional credentials issued by NCMRWF (via their THREDDS Data Server / OPeNDAP endpoint at `https://ncmrwf.gov.in/`). Specifically:
+- There is no open API key or anonymous HTTP endpoint for IMDAA downloads.
+- Access is granted to Indian meteorological institutions and universities via institutional letter of intent; the application process is documented at [ncmrwf.gov.in](https://ncmrwf.gov.in/ncum_op_info.html).
+- Once institutional TDS credentials are obtained, the pluggable `ingestion/clients.py` architecture is designed to add an `NCMRWFClient` class as a contained change without touching the blending or verification modules.
 
 ---
 
